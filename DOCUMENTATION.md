@@ -584,15 +584,164 @@ A: Multiplication and division. Booth's algorithm (signed multiplication) and re
 
 ---
 
+# 6. The Data Flow Tab (project expansion)
+
+After the ALU Internals tool was reviewed as "too basic," we extended the project with a second tab: the **MIPS Data Flow Visualizer**. It uses the ALU we already built as the centerpiece of a fuller animated execution view — showing where operands come from (the register file), where the result goes (back to the register file, or to data memory), and animating value-blobs traveling along wires between the three boxes.
+
+## 6.1 What the Data Flow tab shows
+
+For any of these instructions:
+- `add`, `sub`, `and`, `or`, `slt` (R-type)
+- `addi` (I-type arithmetic)
+- `lw` (load word)
+- `sw` (store word)
+
+…the tab animates the data flow step by step:
+
+1. **Register read**: the cell of the source register (`$rs`, `$rt`) glows blue in the register file panel, and a yellow value-blob slides along a wire to the ALU's input port.
+2. **Immediate** (for I-type): a purple blob appears near the ALU's input B with the sign-extended immediate value.
+3. **ALU compute**: the ALU panel glows orange, displays the operation, and the result appears with its status flags (Z, N, C, V).
+4. **Memory access** (for `lw`/`sw` only): a blob carries the computed address from the ALU to the memory panel; the active memory row glows green (read) or pink (write).
+5. **Writeback**: a blob carries the final value back to the destination register, which glows orange and updates its displayed value.
+
+A scrolling execution log at the bottom captures each step in text form, so the instructor sees the same story two ways: visually (animations) and textually (log).
+
+## 6.2 Why this extension matters
+
+The original ALU Internals tab answered: "How does the ALU compute the operation at the gate level?"
+The Data Flow tab answers: "Where does the ALU's operand come from, and where does the result go?"
+
+Together they cover:
+- **Instruction formats** — the input bar accepts MIPS assembly; the executor decodes R-type vs I-type vs load/store and reads the corresponding fields (`rs`, `rt`, `rd`, `immediate`).
+- **Datapath components** — the three main visible components in the textbook single-cycle datapath are present: **register file**, **ALU**, **data memory**.
+- **Data flow** — animated wires show how values travel between components, which is the literal definition of "data path."
+- **Hardware reuse** — the ALU is used for both arithmetic (`add`) and address calculation (`lw`/`sw`), demonstrating that the same physical ALU serves multiple instruction types.
+- **Cross-tab linking** — the "Open Internals →" button hands the current operation to Tab 1, letting the instructor see the same ADD instruction *both* at the data-flow level and at the gate-level view.
+
+## 6.3 New code — file by file
+
+### `AppPanel.java`
+Root content pane that hosts the two tabs (a `JTabbedPane`). Provides `showALUInternals()` and `showDataFlow()` methods so panels can switch tabs programmatically (used by the "Open Internals" button).
+
+### `MachineState.java`
+The simulated machine state: 32 registers (with `$zero` hardwired to 0) and a sparse `Map<address, value>` memory. Comes pre-seeded with demo values:
+- `$t1 = 10`, `$t2 = 6`, `$t3 = -3`, `$t4 = 0x1000` (memory base), `$t5 = 0xFF`
+- Memory at `0x1000` = `0xDEADBEEF`, `0x1004` = `0x12345678`, etc.
+
+Static utilities `regName(idx)` and `regIndex(name)` convert between register indices and MIPS conventional names like `$t0`, `$sp`, `$ra`, etc.
+
+### `ParsedInstruction.java`
+A structured representation of one MIPS instruction. Fields: `kind` (R_TYPE / I_TYPE_ARITH / LOAD / STORE), `mnemonic`, `aluOp`, `rs`, `rt`, `rd`, `immediate`.
+
+### `InstructionParser.java`
+Hand-rolled parser for a small MIPS subset. Switches on the mnemonic, calls one of three sub-parsers (`parseRType`, `parseITypeArith`, `parseMemory`), produces a `ParsedInstruction`. Accepts `0x` hex, `0b` binary, or decimal immediates including negatives.
+
+### `ExecutionStep.java`
+One step in the animation. Has a `Type` enum (`READ_REG`, `IMMEDIATE`, `ALU_COMPUTE`, `MEM_READ`, `MEM_WRITE`, `WRITEBACK`) plus the fields each type needs (register index, address, value, ALU op, port name, etc.). Static factory methods (`readReg`, `immediate`, `aluCompute`, `memRead`, `memWrite`, `writebackFromALU`, `writebackFromMem`) build them.
+
+### `InstructionExecutor.java`
+The bridge between a `ParsedInstruction` + `MachineState` and a list of `ExecutionStep`s. For each instruction kind it emits the appropriate sequence:
+- R-type → READ_REG (rs, A), READ_REG (rt, B), ALU_COMPUTE, WRITEBACK (rd)
+- I-type arith → READ_REG (rs, A), IMMEDIATE, ALU_COMPUTE, WRITEBACK (rt)
+- Load → READ_REG (rs, A), IMMEDIATE, ALU_COMPUTE (address), MEM_READ, WRITEBACK from MEM
+- Store → READ_REG (rs, A), IMMEDIATE, ALU_COMPUTE (address), READ_REG (rt as data), MEM_WRITE
+
+It also mutates the `MachineState` so that subsequent instructions see the result.
+
+### `RegisterFilePanel.java`
+The 32-register grid. 4 rows × 8 columns. Each cell shows the register number, current hex value, and conventional name. Methods `markRead(idx, port)`, `markWrite(idx, value)`, `clearHighlights()`, `refreshAll()`. Clicking a cell opens a dialog to edit its value (except `$zero`).
+
+### `MemoryPanel.java`
+Scrollable list of word-aligned memory rows with address, value, and ASCII columns. Methods `markRead(addr)`, `markWrite(addr, value)`, `clearHighlights()`. Auto-scrolls so the active address is visible.
+
+### `MiniALUPanel.java`
+A compact ALU representation for this tab. Shows operands, operation name, result, and flag lamps. The **"Open Internals →"** button triggers a callback (wired by `DataFlowPanel`) that switches the JTabbedPane back to Tab 1 with the same operands and operation.
+
+### `ExecutionLogPanel.java`
+Scrolling `JTextArea` with an instruction header line, then numbered steps. Automatically scrolls to the bottom as new steps arrive.
+
+### `WireAnimation.java`
+One in-flight animation. Holds source point, destination point, value label, color, duration. Tracks elapsed time and exposes `easedProgress()` (ease-in-out using a cosine curve) and `currentPos()` (interpolated point). One animation = one moving value-blob.
+
+### `WiresOverlay.java`
+Transparent JPanel that sits on top of the central content via a `JLayeredPane`. In `paintComponent`, draws static wires (light gray, if configured) and the current active `WireAnimation` — the wire highlighted in amber, plus a pill-shaped blob with the value text traveling along it.
+
+### `DataFlowPanel.java`
+The orchestrator. Holds all six new GUI panels, the instruction bar (combo + text field + speed slider + Run/Step/Reset buttons), the `WiresOverlay`, and the animation state machine:
+- `pendingSteps` — the list of steps for the current instruction
+- `stepCursor` — which step we're on
+- `currentAnim` — the in-flight `WireAnimation`
+- A 16ms `Timer` advances the animation each frame; when it completes, `advanceToNextStep()` moves on
+
+The `Run` button plays all steps automatically; `Step` advances one at a time. `Reset` restores `MachineState` to its initial values and clears the log.
+
+## 6.4 Animation flow per instruction
+
+### `add $t0, $t1, $t2`
+1. `$t1` cell glows blue → blob travels along top wire to ALU input A
+2. `$t2` cell glows blue → blob travels along bottom wire to ALU input B
+3. ALU box glows orange → result computed (16), flags update
+4. Result blob travels along writeback wire → `$t0` cell glows orange and updates to 16
+
+### `addi $t0, $t1, 5`
+1. `$t1` cell glows blue → blob to ALU input A
+2. Purple "imm" blob appears at ALU input B (representing sign-extended immediate)
+3. ALU glows orange → result 15
+4. Writeback to `$t0`
+
+### `lw $t0, 4($t4)`
+1. `$t4` cell glows blue → blob (0x1000) to ALU input A
+2. Purple "imm" blob (4) to ALU input B
+3. ALU computes address 0x1004
+4. Address blob (green) travels to memory; row at 0x1004 glows green; value 0x12345678 is read
+5. Writeback blob (orange) travels from memory back to `$t0`; cell glows orange with new value
+
+### `sw $t1, 12($t4)`
+1. `$t4` cell glows blue → blob to ALU input A
+2. Purple "imm" blob (12) to ALU input B
+3. ALU computes address 0x100C
+4. `$t1` cell glows blue → data blob (pink) goes around the ALU toward memory
+5. Address blob (pink) reaches memory; row at 0x100C glows pink with the new value
+
+## 6.5 Demo script for the new tab
+
+1. Open the tool, switch to **MIPS Data Flow** tab.
+2. Pick `add $t0, $t1, $t2` from the dropdown, hit **Run**. Point out: $t1 lights up, blob travels, ALU lights up, result appears, blob goes back to $t0. *That's the R-type data path.*
+3. Pick `addi $t0, $t1, 5`. Point out the purple immediate blob appearing at input B instead of a second register read. *That's the I-type data path.*
+4. Pick `lw $t0, 4($t4)`. Point out the address calculation in the ALU, then the green blob to memory, then the orange writeback. *That's the load data path.*
+5. Pick `sw $t1, 12($t4)`. Point out that nothing writes back to the register file — only memory updates. *That's the store data path.*
+6. With the result still on screen, click **"Open Internals →"** in the ALU panel. Switches to Tab 1 with the same operands. *Now we see the same ADD operation at the gate level — full adders, carry propagation, the works.*
+
+That's a complete narrative: instruction → format decode → component activation → ALU operation → writeback, plus the ability to drill into the ALU's internals on demand.
+
 # Quick reference — file map
 
 ```
 src/aluviz/
-├── Main.java                  Entry point: creates JFrame, sets up Swing
-├── MainPanel.java             Root UI: inputs, results, flags, ALU control display
-├── ALUCore.java               Pure simulation: full adder, all ops, flags, trace
-├── AdderSchematicPanel.java   Schematic view (ADD/SUB/SLT) with visible gates
-└── RegisterViewPanel.java     Register view (AND/OR/XOR/NOR/shifts)
+│
+├── ── Bootstrap ──
+├── Main.java                   Entry point: creates JFrame, sets up Swing
+├── AppPanel.java               Tab host (ALU Internals + MIPS Data Flow)
+│
+├── ── Tab 1: ALU Internals ──
+├── MainPanel.java              Inputs, results, flags, ALU control display
+├── ALUCore.java                Pure simulation: full adder, all ops, flags, trace
+├── AdderSchematicPanel.java    Schematic view (ADD/SUB/SLT) with visible gates
+├── RegisterViewPanel.java      Register view (AND/OR/XOR/NOR/shifts)
+│
+├── ── Tab 2: MIPS Data Flow ──
+├── DataFlowPanel.java          Orchestrator + instruction bar + animation state machine
+├── MachineState.java           Simulated 32 registers + sparse memory
+├── ParsedInstruction.java      Structured MIPS instruction
+├── InstructionParser.java      Assembly text → ParsedInstruction
+├── ExecutionStep.java          One animation/log step
+├── InstructionExecutor.java    ParsedInstruction + MachineState → step sequence
+├── RegisterFilePanel.java      32-register grid with read/write highlights
+├── MemoryPanel.java            Scrollable memory view, read/write highlights
+├── MiniALUPanel.java           Compact ALU view + "Open Internals" button
+├── ExecutionLogPanel.java      Scrolling step log
+├── WireAnimation.java          One in-flight value-blob (ease-in-out)
+└── WiresOverlay.java           Transparent overlay drawing animated wires
 ```
 
 # Quick reference — operation table

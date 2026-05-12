@@ -1,7 +1,12 @@
-# ALU Internals Visualizer
+# MIPS ALU & Data Flow Visualizer
 
 **Computer Architecture Final Lab Project**
-An interactive Java/Swing visualization tool that opens up the "ALU box" hidden inside the single-cycle and multi-cycle MIPS datapaths and shows how each operation is actually computed at the bit and gate level.
+An interactive Java/Swing visualization tool with two complementary views:
+
+1. **ALU Internals** — opens up the "ALU box" and shows how each operation is computed at the bit and gate level (ripple-carry addition, two's-complement subtraction, shifts, logic).
+2. **MIPS Data Flow** — animates how operands flow from the register file into the ALU and back to the register file or memory, for instructions like `add`, `sub`, `addi`, `lw`, `sw`.
+
+The two tabs are linked: the Data Flow tab has an "Open Internals" button that hands the current operation off to the ALU Internals tab for the gate-level view.
 
 ## How to run
 
@@ -83,14 +88,31 @@ Run these in order during the demo:
 
 ```
 src/aluviz/
-├── Main.java                  — JFrame entry point
-├── MainPanel.java             — Root panel: inputs, results, flags, control signal
-├── ALUCore.java               — Pure-Java ALU simulation logic + per-bit trace
-├── AdderSchematicPanel.java   — Schematic visualization for ADD/SUB/SLT
-└── RegisterViewPanel.java     — Register-style visualization for the rest
+├── Main.java                       — JFrame entry point
+├── AppPanel.java                   — Root content pane (hosts the two tabs)
+│
+├── ── Tab 1: ALU Internals ──
+├── MainPanel.java                  — Inputs, results, flags, control signal
+├── ALUCore.java                    — Pure-Java ALU simulation + per-bit trace
+├── AdderSchematicPanel.java        — Schematic visualization for ADD/SUB/SLT
+├── RegisterViewPanel.java          — Register-style visualization for bitwise + shifts
+│
+├── ── Tab 2: MIPS Data Flow ──
+├── DataFlowPanel.java              — Orchestrator: instruction bar, layered center, log
+├── MachineState.java               — Simulated registers + memory
+├── ParsedInstruction.java          — Parsed MIPS instruction (R/I/load/store)
+├── InstructionParser.java          — Parses 5 instruction shapes from assembly text
+├── ExecutionStep.java              — One animation/log step
+├── InstructionExecutor.java        — Converts an instruction into a step sequence
+├── RegisterFilePanel.java          — 32-register grid with read/write highlights
+├── MemoryPanel.java                — Scrollable word memory with ASCII column
+├── MiniALUPanel.java               — Compact ALU view + Open Internals button
+├── ExecutionLogPanel.java          — Scrolling textual log of every step
+├── WireAnimation.java              — One in-flight value-blob (ease-in-out)
+└── WiresOverlay.java               — Transparent overlay drawing wires + animated blobs
 ```
 
-The simulation core (`ALUCore.java`) is fully decoupled from the GUI — it could be reused by a future MARS Tool plugin that observes the ALU during MIPS program execution.
+The simulation core (`ALUCore.java`) and the execution engine (`InstructionExecutor.java`) are fully decoupled from the GUI — they could be reused by a future MARS Tool plugin that observes execution during a real MIPS program run.
 
 ## Limitations / scope notes
 
