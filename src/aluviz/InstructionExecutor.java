@@ -32,39 +32,40 @@ public class InstructionExecutor {
 
     public static PipelinePlan plan(ParsedInstruction instr, MachineState state, HazardDetector.Result hazard) {
         List<ExecutionStep> steps = new ArrayList<>();
+        int cycle = 1;
 
-        steps.add(ExecutionStep.cycle(ExecutionStep.Type.IF, "Cycle 1 -> IF"));
-        steps.add(ExecutionStep.cycle(ExecutionStep.Type.ID, "Cycle 2 -> ID"));
+        steps.add(ExecutionStep.cycle(ExecutionStep.Type.IF, "Cycle " + cycle++ + " -> IF"));
+        steps.add(ExecutionStep.cycle(ExecutionStep.Type.ID, "Cycle " + cycle++ + " -> ID"));
 
         if (hazard != null && hazard.type != HazardDetector.HazardType.NONE) {
             if (hazard.type == HazardDetector.HazardType.LOAD_USE) {
-                steps.add(ExecutionStep.stall("Hazard detected: load-use RAW -> stall"));
-                steps.add(ExecutionStep.bubble("Insert bubble to wait for loaded value"));
+                steps.add(ExecutionStep.stall("Cycle " + cycle++ + " -> STALL (load-use RAW hazard)"));
+                steps.add(ExecutionStep.bubble("Cycle " + cycle++ + " -> BUBBLE (inserted automatically)"));
             } else {
-                steps.add(ExecutionStep.forward("Hazard detected: RAW -> forwarding suggested"));
+                steps.add(ExecutionStep.forward("Cycle " + cycle++ + " -> FORWARD (RAW hazard, forwarding suggested)"));
             }
         }
 
         switch (instr.kind) {
             case R_TYPE:
-                steps.add(ExecutionStep.cycle(ExecutionStep.Type.EX, "Cycle 3 -> EX"));
-                steps.add(ExecutionStep.cycle(ExecutionStep.Type.WB, "Cycle 4 -> WB"));
+                steps.add(ExecutionStep.cycle(ExecutionStep.Type.EX, "Cycle " + cycle++ + " -> EX"));
+                steps.add(ExecutionStep.cycle(ExecutionStep.Type.WB, "Cycle " + cycle++ + " -> WB"));
                 executeRType(instr, state, steps);
                 break;
             case I_TYPE_ARITH:
-                steps.add(ExecutionStep.cycle(ExecutionStep.Type.EX, "Cycle 3 -> EX"));
-                steps.add(ExecutionStep.cycle(ExecutionStep.Type.WB, "Cycle 4 -> WB"));
+                steps.add(ExecutionStep.cycle(ExecutionStep.Type.EX, "Cycle " + cycle++ + " -> EX"));
+                steps.add(ExecutionStep.cycle(ExecutionStep.Type.WB, "Cycle " + cycle++ + " -> WB"));
                 executeITypeArith(instr, state, steps);
                 break;
             case LOAD:
-                steps.add(ExecutionStep.cycle(ExecutionStep.Type.EX, "Cycle 3 -> EX"));
-                steps.add(ExecutionStep.cycle(ExecutionStep.Type.MEM, "Cycle 4 -> MEM"));
-                steps.add(ExecutionStep.cycle(ExecutionStep.Type.WB, "Cycle 5 -> WB"));
+                steps.add(ExecutionStep.cycle(ExecutionStep.Type.EX, "Cycle " + cycle++ + " -> EX"));
+                steps.add(ExecutionStep.cycle(ExecutionStep.Type.MEM, "Cycle " + cycle++ + " -> MEM"));
+                steps.add(ExecutionStep.cycle(ExecutionStep.Type.WB, "Cycle " + cycle++ + " -> WB"));
                 executeLoad(instr, state, steps);
                 break;
             case STORE:
-                steps.add(ExecutionStep.cycle(ExecutionStep.Type.EX, "Cycle 3 -> EX"));
-                steps.add(ExecutionStep.cycle(ExecutionStep.Type.MEM, "Cycle 4 -> MEM"));
+                steps.add(ExecutionStep.cycle(ExecutionStep.Type.EX, "Cycle " + cycle++ + " -> EX"));
+                steps.add(ExecutionStep.cycle(ExecutionStep.Type.MEM, "Cycle " + cycle++ + " -> MEM"));
                 executeStore(instr, state, steps);
                 break;
         }

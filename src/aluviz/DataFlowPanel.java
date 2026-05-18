@@ -44,6 +44,7 @@ public class DataFlowPanel extends JPanel {
     private final MiniALUPanel aluPanel;
     private final MemoryPanel memoryPanel;
     private final ExecutionLogPanel logPanel;
+    private final PipelineStagePanel stagePanel;
     private final WiresOverlay wiresOverlay = new WiresOverlay();
 
     private final JComboBox<String> exampleCombo = new JComboBox<>(EXAMPLES);
@@ -79,8 +80,9 @@ public class DataFlowPanel extends JPanel {
         aluPanel    = new MiniALUPanel();
         memoryPanel = new MemoryPanel(state);
         logPanel    = new ExecutionLogPanel();
+        stagePanel  = new PipelineStagePanel();
 
-        add(buildInstructionBar(), BorderLayout.NORTH);
+        add(buildTopSection(), BorderLayout.NORTH);
         add(buildLayeredCenter(),  BorderLayout.CENTER);
         add(logPanel,              BorderLayout.SOUTH);
 
@@ -156,6 +158,16 @@ public class DataFlowPanel extends JPanel {
         bar.add(hazardBanner, c);
 
         return bar;
+    }
+
+    private JComponent buildTopSection() {
+        JPanel top = new JPanel();
+        top.setBackground(BG);
+        top.setLayout(new BoxLayout(top, BoxLayout.Y_AXIS));
+        top.add(buildInstructionBar());
+        top.add(Box.createVerticalStrut(8));
+        top.add(stagePanel);
+        return top;
     }
 
     private JComponent buildLayeredCenter() {
@@ -237,6 +249,7 @@ public class DataFlowPanel extends JPanel {
             }
 
             pendingSteps = InstructionExecutor.plan(currentInstr, state, currentHazard).steps;
+            stagePanel.setPlan(currentInstr, currentHazard, pendingSteps);
             stepCursor = 0;
         } catch (Exception ex) {
             JOptionPane.showMessageDialog(this,
@@ -278,6 +291,7 @@ public class DataFlowPanel extends JPanel {
 
     private void beginCurrentStep() {
         ExecutionStep step = pendingSteps.get(stepCursor);
+        stagePanel.setActiveStep(step.type);
         if (step.type == ExecutionStep.Type.IF || step.type == ExecutionStep.Type.ID || step.type == ExecutionStep.Type.EX
             || step.type == ExecutionStep.Type.MEM || step.type == ExecutionStep.Type.WB
             || step.type == ExecutionStep.Type.STALL || step.type == ExecutionStep.Type.BUBBLE
@@ -414,6 +428,7 @@ public class DataFlowPanel extends JPanel {
         regFile.refreshAll();
         memoryPanel.refreshRows();
         regFile.clearHazard();
+        stagePanel.clearActive();
         // remember last completed instruction for hazard detection with next instruction
         lastCompletedInstruction = currentInstr;
     }
@@ -423,6 +438,7 @@ public class DataFlowPanel extends JPanel {
         stepCursor = 0;
         pendingSteps = null;
         currentAnim = null;
+        stagePanel.clearActive();
     }
 
     private int currentDuration() {

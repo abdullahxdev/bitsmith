@@ -8,7 +8,9 @@ The current build goes beyond a basic ALU demo and now includes:
 
 - A polished two-tab interface with ALU Internals and MIPS Data Flow
 - Cycle-aware execution labels for IF, ID, EX, MEM, and WB
+- A pipeline stage view that shows IF, ID, EX, MEM, and WB per instruction
 - Hazard detection for RAW and load-use dependencies
+- Automatic stall insertion for load-use hazards
 - Visual hazard cues for stall, bubble, and forwarding suggestions
 - A cleaner UI theme across the register file, ALU, memory, and execution log
 - Instruction parsing and animated data movement for add, sub, and, or, slt, addi, lw, and sw
@@ -32,7 +34,9 @@ The project is designed to be easy to demo live. You can run an instruction, wat
 - Instruction parsing for add, sub, and, or, slt, addi, lw, and sw
 - Step-based execution log for the data flow view
 - Cycle labels for IF, ID, EX, MEM, and WB
+- Pipeline stage view for each instruction
 - Hazard detection for RAW and load-use cases
+- Automatic stall insertion when a load-use hazard appears
 - Visual cues for stall, bubble, and forwarding suggestions
 
 ## How to run
@@ -56,6 +60,8 @@ add $t2, $t0, $t3
 ```
 
 You should see the hazard message in the execution log, the related registers highlighted in the register file, and the hazard banner at the top of the instruction bar.
+
+To see the automatic stall insertion, use the same pair and watch the stage view show the inserted stall and bubble before execution continues.
 
 ## Project layout
 
@@ -84,9 +90,9 @@ src/aluviz/
 
 ## Contributors
 
-- abdullahxdev
-- saadhtiwana
-- ahmadmustafa02
+- [abdullahxdev](https://github.com/abdullahxdev)
+- [saadhtiwana](https://github.com/saadhtiwana)
+- [ahmadmustafa02](https://github.com/ahmadmustafa02)
 
 ## Notes
 
