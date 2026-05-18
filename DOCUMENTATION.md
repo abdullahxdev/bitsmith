@@ -1,769 +1,1077 @@
-# ALU Internals Visualizer — Complete Documentation
+# Bitsmith Project Documentation
 
-This document is a deep walkthrough of the project — written for someone who has studied basic Computer Architecture but wants to understand **every part** of how the project works, what's happening in the code, and which CA concepts underpin each piece.
+## Executive Summary
 
-The structure is:
+Bitsmith is a Java Swing computer architecture visualizer focused on the MIPS ALU and datapath. It was built as a final semester Computer Architecture project to make the behavior of a processor visible instead of abstract. The project now includes two coordinated views:
 
-1. **What the project is and why it exists**
-2. **Computer Architecture foundations** — every CA concept used, explained from the basics
-3. **Code walkthrough** — every file, every important function
-4. **End-to-end data flow** — what happens between clicking "Compute" and seeing the animation
-5. **Likely viva questions and how to answer them**
+- ALU Internals, which shows how arithmetic and logic operations are executed at the bit and gate level.
+- MIPS Data Flow, which shows register access, ALU execution, memory access, writeback, hazard detection, and cycle labels.
 
----
+The application is designed for live demonstrations, class presentations, and viva discussion. It is report-friendly because the code is organized into clear modules that map directly to Computer Architecture concepts.
 
-# 1. What the project is and why it exists
+## 1. Project Purpose
 
-## The problem we're solving
+The main goal of Bitsmith is to teach how a MIPS-like CPU works internally. A typical textbook diagram shows the ALU, register file, memory, and control unit as blocks. Bitsmith expands those blocks into an interactive visual model.
 
-When you draw the MIPS single-cycle or multi-cycle datapath in your CA textbook, the **ALU** appears as a single box with two inputs (A and B), one output (Result), one control signal (4-bit ALU operation code), and a Zero flag wire coming out.
+The project helps answer questions such as:
 
-But that's a black box. Inside that box are gates, adders, multiplexers, and control logic that actually *compute* the operation. A student who only studies the datapath diagram never sees what's inside.
+- What happens inside the ALU when add or sub is executed?
+- How does a ripple-carry adder propagate carry from bit 0 to bit 7?
+- How are load and store instructions translated into register reads, address calculation, memory access, and writeback?
+- What is a RAW hazard and why does it cause a stall?
+- What does forwarding mean in a pipeline?
 
-## What our tool does
+This is why the project is a good fit for Computer Architecture coursework. It connects the theoretical datapath diagrams from the textbook to an interactive software simulation.
 
-The ALU Internals Visualizer is a Java desktop application (built with Swing) that:
+## 2. Main Features
 
-1. Lets the user enter two 8-bit operands (in binary, decimal, or hex) and choose an ALU operation.
-2. **Animates** the computation step by step — showing carry propagation in the adder, bit-by-bit logical operations, sign preservation in shifts, etc.
-3. Displays the 4-bit ALU control signal that selects the operation (matching textbook conventions).
-4. Updates the status flags (Zero, Negative, Carry-out, Overflow) live.
-5. Uses two complementary visual styles — a **schematic view** with visible XOR/AND/OR gates for the adder, and a **register view** with bit-rows-and-gates for everything else.
+### 2.1 ALU Internals
 
-## Why 8-bit instead of 32-bit
+The ALU tab provides an 8-bit ALU visualizer with the following capabilities:
 
-A 32-bit adder has 32 full-adder cells. On a typical laptop screen, drawing 32 schematic cells with gates inside each would be unreadable. We use 8 bits so each full adder cell is large enough to show its internal gates clearly. **Every concept transfers identically to 32-bit** — the only difference is the width of the data path.
+- Binary, decimal, and hexadecimal operand input
+- ADD, SUB, AND, OR, XOR, NOR, SLT, SLL, SRL, and SRA
+- Ripple-carry adder animation
+- Bit-by-bit register style visualizations for logic and shift operations
+- Status flags: Zero, Negative, Carry, Overflow
+- ALU control code display using textbook style 4-bit operation codes
 
-## What "single-cycle and multi-cycle" connection means
+### 2.2 MIPS Data Flow
 
-The instructor's project scope is "single-cycle datapath and multi-cycle datapath." The ALU is the central computational element in both:
+The Data Flow tab provides a higher level CPU simulation view:
 
-- In the **single-cycle datapath**, the ALU executes once per instruction. The whole instruction must finish in one clock cycle, so the cycle time is limited by the slowest path (usually a `lw` that goes through the ALU and then memory).
-- In the **multi-cycle datapath**, the same ALU is reused across multiple cycles for different purposes: in the IF stage it computes `PC + 4`, in the EX stage it does the arithmetic/logic op or computes the branch target, in the MEM stage it computes the effective memory address. Reusing one ALU is what saves hardware.
+- Instruction parsing for add, sub, and, or, slt, addi, lw, sw
+- Register file visualization for all 32 registers
+- Data memory view with address, hex value, and ASCII column
+- ALU box with live inputs and outputs
+- Execution log with step-by-step trace
+- Animated wires and moving value bubbles
+- Pipeline stage strip showing IF, ID, EX, MEM, WB
+- Hazard detection for RAW and load-use dependencies
+- Automatic stall insertion for load-use hazards
+- Visual cues for stall, bubble, and forwarding suggestions
 
-Our tool *is* the inside of that ALU box. When we say the ALU control signal is `0010` for ADD, that's the same control bus that the main control unit drives in both datapath designs.
+### 2.3 UI and Presentation Improvements
 
----
+The project also includes a cleaner visual style:
 
-# 2. Computer Architecture foundations
+- Softer background colors
+- Better section titles and borders
+- Hazard banner in the instruction area
+- Improved readability of register, ALU, memory, and log panels
 
-This section explains every CA concept the project touches, starting from the basics.
+## 3. Computer Architecture Concepts Covered
 
-## 2.1 Number representations
+Bitsmith is not just a user interface. Each module maps to specific Computer Architecture concepts.
 
-A computer stores everything as bits (0s and 1s). The same 8-bit pattern can be interpreted three ways:
+### 3.1 Number Systems
 
-| Bit pattern | Binary | Decimal (unsigned) | Decimal (signed, two's complement) | Hex |
-|---|---|---|---|---|
-| `0000 0101` | 5 | 5 | 5 | 0x05 |
-| `0111 1111` | 127 | 127 | 127 | 0x7F |
-| `1000 0000` | 128 | 128 | **-128** | 0x80 |
-| `1111 1111` | 255 | 255 | **-1** | 0xFF |
+The application accepts and displays values in multiple formats:
 
-The hardware doesn't know or care which interpretation you want. The same adder circuit works for both unsigned and signed addition — only the interpretation of the result and the overflow detection differ.
+- Binary
+- Decimal
+- Hexadecimal
 
-**In our project**: `ALUCore.parseOperand` accepts all three input formats. `MainPanel.showResult` displays the result in all three.
+This supports lessons on base conversion and machine representation.
 
-## 2.2 Two's complement (how computers represent negative numbers)
+### 3.2 Two's Complement
 
-To get the two's complement of a number:
-1. Invert every bit (1s complement).
-2. Add 1.
+Negative numbers are represented using two's complement. The project demonstrates this through subtraction, signed decimal display, and arithmetic right shift behavior.
 
-Example, 8-bit representation of `-5`:
-```
-   5 in binary:       0000 0101
-   Invert all bits:   1111 1010
-   Add 1:             1111 1011  ← this is -5 in two's complement
-```
+### 3.3 Logic Gates
 
-**Why this matters**: with two's complement, the same hardware adder can compute `A - B` by computing `A + (~B) + 1`. No separate subtractor needed. This is the single most important reuse in the ALU.
+The ALU shows the use of:
 
-**In our project**: `ALUCore.doAdd` takes a `subtract` flag. If true, it inverts B and starts the carry chain with 1 instead of 0. Same code path as addition — that's what hardware reuse looks like in software.
+- AND
+- OR
+- XOR
+- NOR
 
-## 2.3 Logic gates
+These are the building blocks of arithmetic and logic operations.
 
-The four gates we use:
+### 3.4 Full Adder and Ripple-Carry Adder
 
-| Gate | Symbol | Truth table |
-|---|---|---|
-| AND | A·B | `00→0  01→0  10→0  11→1` |
-| OR  | A+B | `00→0  01→1  10→1  11→1` |
-| XOR | A⊕B | `00→0  01→1  10→1  11→0` |
-| NOR | ¬(A+B) | `00→1  01→0  10→0  11→0` |
+The ADD and SUB operations are built from a ripple-carry adder model. This shows:
 
-These are physical circuits (transistors arranged a certain way). Everything else in the ALU is built from combinations of these.
+- Sum calculation
+- Carry propagation
+- Carry out from the most significant bit
+- Why subtraction can be implemented as addition with inverted B and carry-in 1
 
-**In our project**: the register view shows truth tables for each bitwise operation. The schematic view shows XOR and AND/OR clusters inside each full adder.
+### 3.5 Status Flags
 
-## 2.4 Half adder and full adder
+The tool shows the standard flags used by many instructions and branches:
 
-A **half adder** adds two single bits A and B and produces a Sum bit and a Carry-out bit. It needs no carry-in.
+- Z for zero
+- N for negative
+- C for carry out
+- V for signed overflow
 
-```
-A ──┬── XOR ──── Sum
-    │   │
-    │  XOR (same gate)
-B ──┼── │
-    │   │
-    └── AND ──── Cout
-```
+### 3.6 Shift Operations
 
-Truth table:
-```
-A B | Sum Cout
-0 0 |  0   0
-0 1 |  1   0
-1 0 |  1   0
-1 1 |  0   1   ← carry happens when both bits are 1
-```
+The project includes all three common shift styles:
 
-A **full adder** adds three bits: A, B, and a Carry-in (Cin) from the previous bit. It produces a Sum bit and a Carry-out bit.
+- SLL, shift left logical
+- SRL, shift right logical
+- SRA, shift right arithmetic
 
-```
-Sum  = A XOR B XOR Cin
-Cout = (A AND B) OR (Cin AND (A XOR B))
-```
+### 3.7 ALU Control
 
-In words: the sum bit is 1 whenever an odd number of the three inputs are 1. The carry-out is 1 whenever at least two of the three inputs are 1.
+The ALU control panel shows how a 4-bit control signal selects the operation. This is directly tied to the MIPS ALU control unit concept.
 
-You can build a full adder from two half adders plus an OR gate. In our schematic view, each full adder cell shows two gate boxes — the top "XOR" box computes the sum, and the bottom "AND/OR" box computes the carry-out.
+### 3.8 Datapath and Execution Flow
 
-**In our project**: `ALUCore.doAdd` implements exactly the full-adder formulas above in its inner loop:
-```java
-int s    = ai ^ bi ^ carry;                       // Sum  = A XOR B XOR Cin
-int cOut = (ai & bi) | (carry & (ai ^ bi));       // Cout = (A·B) + (Cin · (A⊕B))
-```
+The Data Flow tab demonstrates how an instruction moves through the register file, ALU, memory, and writeback path.
 
-## 2.5 Ripple-carry adder
+### 3.9 Hazards and Pipelining
 
-To add two 8-bit numbers, you chain 8 full adders together: the carry-out of bit *i* becomes the carry-in of bit *i+1*. The carry "ripples" from the least significant bit (LSB, right side) to the most significant bit (MSB, left side).
+The project now includes pipeline-oriented concepts:
 
-```
-        bit 7    bit 6    bit 5    ...    bit 1    bit 0
-        ┌────┐  ┌────┐  ┌────┐         ┌────┐  ┌────┐
-A[7]───►│ FA │  │ FA │  │ FA │   ...   │ FA │  │ FA │◄───A[0]
-B[7]───►│    │  │    │  │    │         │    │  │    │◄───B[0]
-        │    │  │    │  │    │         │    │  │    │◄─── Cin=0 (or 1 for SUB)
-        └─┬──┘  └─┬──┘  └─┬──┘         └─┬──┘  └─┬──┘
-          │       │       │              │       │
-        Sum[7]  Sum[6]  Sum[5]   ...   Sum[1]  Sum[0]
+- IF, ID, EX, MEM, WB stage labels
+- RAW hazard detection
+- Load-use hazard detection
+- Stall and bubble insertion
+- Forwarding suggestions
 
-  ◄── Cout       ◄── ripple carry chain ──
-```
+## 4. System Architecture
 
-The downside is that the MSB cell can't compute its Sum until the carry has rippled all the way from the LSB — so total delay is proportional to the width. Faster designs (carry-lookahead, carry-select) exist, but ripple-carry is the simplest and most textbook-standard.
+Bitsmith can be divided into four layers.
 
-**In our project**: the schematic view animates this ripple. Bit 0 (rightmost) lights up first, then bit 1, then bit 2, ... until bit 7 (leftmost). The carry-out arrow turns red if the carry is 1, gray if 0.
+### 4.1 User Interface Layer
 
-## 2.6 Status flags
+This is the Swing layer that the user sees. It includes the main window, tabs, panels, buttons, sliders, labels, and visual components.
 
-After an ALU operation, four flags summarize the result:
+### 4.2 Simulation Core Layer
 
-- **Z (Zero)**: 1 if the result is exactly zero. Used by `beq` and `bne` branch instructions.
-- **N (Negative)**: 1 if the MSB of the result is 1 (i.e., the result is negative under signed interpretation).
-- **C (Carry-out)**: 1 if the carry rippled out of the MSB. For unsigned addition this signals overflow; for unsigned subtraction it indicates no borrow.
-- **V (Overflow)**: 1 if **signed** overflow happened. This is different from carry-out. Signed overflow occurs when you add two same-signed numbers and get a result with the opposite sign.
+This layer contains the actual logic for the ALU and instruction execution. It is independent of Swing so the code is easier to reason about and test.
 
-**The overflow formula** (used in our code): `V = 1` iff the sign of A equals the sign of B but the sign of the result differs.
+### 4.3 Pipeline and Hazard Layer
 
-Why this works: if both inputs are positive, the true sum is positive, so a negative result means we exceeded the positive range. If both are negative, the true sum is negative, so a positive result means we underflowed.
+This layer adds cycle labels, stage views, and hazard detection to the data flow simulation.
 
-**In our project**: `ALUCore.doAdd` computes all four flags. `MainPanel.FlagLamp` is a custom Swing component that displays each flag as a colored "lamp" — yellow when on, gray when off.
+### 4.4 Machine State Layer
 
-## 2.7 Shifts: SLL, SRL, SRA
+This layer stores the simulated register file and memory so that instructions can read and write data.
 
-Three shift operations exist in MIPS:
+## 5. File-by-File Documentation
 
-- **SLL — Shift Left Logical**: shift all bits left by the shift amount; fill the new low bits with 0. Equivalent to multiplying by 2^shift_amount.
-- **SRL — Shift Right Logical**: shift all bits right; fill the new high bits with 0. Treats the operand as unsigned.
-- **SRA — Shift Right Arithmetic**: shift all bits right; fill the new high bits with the **original sign bit**. Preserves the sign so that a signed division by 2^shift_amount works correctly.
+This section is written so it can be used directly in a project report.
 
-Example with `1111 0000` (= -16 signed):
-- SRL by 2: `0011 1100` (= 60 unsigned) — the sign is lost.
-- SRA by 2: `1111 1100` (= -4 signed) — the sign is preserved.
+### 5.1 `src/aluviz/Main.java`
 
-**In our project**: `ALUCore.doShift` implements all three. The trick for SRA in Java is to sign-extend the 8-bit operand to 32 bits first, then use Java's `>>` (arithmetic shift), then mask back to 8 bits.
+Entry point of the application.
 
-## 2.8 SLT — Set Less Than
+Responsibilities:
 
-`SLT $rd, $rs, $rt` sets `$rd` to 1 if `$rs < $rt` (signed comparison), else to 0. This is how MIPS implements `<` since there's no `blt` instruction in pure MIPS — instead the assembler expands `blt $a, $b, label` into `slt $t0, $a, $b; bne $t0, $zero, label`.
+- Sets the Swing look and feel
+- Creates the main JFrame
+- Places `AppPanel` inside the frame
+- Displays the application window
 
-**How the ALU computes SLT**: it does `A - B` internally and looks at the sign of the result. With one subtlety — if signed overflow happened, the sign of the subtraction is misleading, so the actual rule is:
+### 5.2 `src/aluviz/AppPanel.java`
 
-```
-SLT result = (Negative XOR Overflow) ? 1 : 0
-```
+Root content panel of the application.
 
-If no overflow, this reduces to "result is 1 iff the subtraction came out negative." If overflow, the XOR corrects for the wrap-around.
+Responsibilities:
 
-**In our project**: `ALUCore.doSlt` calls `doAdd` in subtraction mode, then applies the XOR rule.
+- Hosts the top-level tab layout
+- Contains the ALU Internals tab
+- Contains the MIPS Data Flow tab
+- Provides methods for switching between tabs
 
-## 2.9 ALU control signals
+### 5.3 `src/aluviz/MainPanel.java`
 
-The ALU supports many operations, but the **main control unit** of the MIPS processor only outputs a 2-bit signal called **ALUOp**. This is because the main control unit doesn't want to know the difference between, say, `add` and `sub` — both are R-type instructions, both go through the EX stage the same way, both write the result to a register.
+Main panel for ALU Internals.
 
-So the main control sets `ALUOp = 10` for R-type instructions, meaning "look at the funct field." A small dedicated piece of logic called the **ALU control unit** then takes the 2-bit ALUOp plus the 6-bit funct field (the bottom 6 bits of an R-type instruction) and produces a 4-bit ALU operation code that drives the ALU itself.
+Responsibilities:
 
-The textbook 4-bit ALU operation encoding is:
+- Accepts two operands and an operation
+- Calls the ALU core logic
+- Displays the result in binary, decimal, and hex
+- Displays the four status flags
+- Chooses between schematic and register style visualizations
+- Shows the 4-bit ALU control code
 
-| Operation | 4-bit code |
-|---|---|
-| AND | 0000 |
-| OR  | 0001 |
-| ADD | 0010 |
-| SUB | 0110 |
-| SLT | 0111 |
+### 5.4 `src/aluviz/ALUCore.java`
 
-We extended this with codes for XOR, NOR, and the three shifts. The exact codes for those vary by textbook — we picked unique 4-bit patterns.
+The core arithmetic and logic engine.
 
-**In our project**: each entry of the `ALUCore.Op` enum carries its 4-bit `controlBits` string. The `MainPanel` control-signal display shows it live whenever the user picks an operation. The text label below says these signals come from "ALUOp + funct" — making the textbook connection explicit.
+Responsibilities:
 
-## 2.10 The ALU in the single-cycle and multi-cycle datapaths
+- Defines supported ALU operations
+- Computes arithmetic and logic results
+- Implements ripple-carry addition
+- Handles subtraction using two's complement
+- Computes flags
+- Parses operands from decimal, hex, binary, and negative forms
+- Produces bit-level adder trace data for animation
 
-In both datapaths, the ALU sits between the **register file** (which provides operands `$rs` and `$rt`) and the **memory** / **register-file write port** (which receives the result).
+### 5.5 `src/aluviz/AdderSchematicPanel.java`
 
-- In the **single-cycle datapath**: there is exactly one ALU. Every instruction uses it exactly once. The cycle time must accommodate ALU + memory + register-file write delay all in one shot.
-- In the **multi-cycle datapath**: there is still one ALU, but it's used **across multiple cycles** for different sub-tasks. The instruction is broken into IF, ID, EX, MEM, WB stages, and the ALU may be used in IF (PC+4), EX (the actual operation), and MEM (effective address). The clock cycle can be shorter because each cycle does less work.
+Visualizes ADD, SUB, and SLT.
 
-**In our project's demo**, when you stand in front of the instructor, you say: "Our tool is the inside of the ALU box that appears in both these datapath diagrams. The same hardware we visualize is reused multiple times per instruction in the multi-cycle design."
+Responsibilities:
 
----
+- Draws 8 full adder cells
+- Animates carry propagation
+- Shows the internal gates used by each full adder
+- Displays the final sum and carry out
 
-# 3. Code walkthrough — file by file
+### 5.6 `src/aluviz/RegisterViewPanel.java`
 
-The project has 5 Java files in `src/aluviz/`. Total around 750 lines.
+Visualizes bitwise and shift operations.
 
-## 3.1 `Main.java` — application entry point
+Responsibilities:
 
-This is the smallest file and the simplest. Its job:
+- Draws bit rows for A, B, and Result
+- Animates bit-by-bit operation
+- Shows gate boxes for logic operations
+- Shows direction of shifts
+- Explains arithmetic right shift sign handling
 
-1. Set the Swing look-and-feel to the system default (so the window looks native on Mac/Windows/Linux).
-2. Create a JFrame (the main window).
-3. Set the content pane to a new `MainPanel`.
-4. Size the window, center it, show it.
+### 5.7 `src/aluviz/MachineState.java`
 
-```java
-public class Main {
-    public static void main(String[] args) {
-        try {
-            UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
-        } catch (Exception ignored) {}
-        SwingUtilities.invokeLater(() -> {
-            JFrame frame = new JFrame("ALU Internals Visualizer ...");
-            frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-            frame.setContentPane(new MainPanel());
-            frame.pack();
-            frame.setLocationRelativeTo(null);
-            frame.setMinimumSize(new Dimension(1100, 720));
-            frame.setVisible(true);
-        });
-    }
-}
-```
+Represents the simulated CPU state.
 
-**Why `SwingUtilities.invokeLater`**: Swing is not thread-safe. All UI construction must happen on the Event Dispatch Thread (EDT), and `invokeLater` is the standard way to switch from `main`'s thread onto the EDT.
+Responsibilities:
 
-## 3.2 `ALUCore.java` — the brain of the project
+- Stores 32 registers
+- Stores sparse memory using a map
+- Provides reset values for demo instructions
+- Provides register name and index conversion helpers
+- Enforces `$zero` as a hardwired zero register
 
-This is the most important file. It contains all the actual ALU logic — pure Java, no GUI dependencies. The reason for this separation: the GUI just visualizes whatever `ALUCore` computes. Anyone (including a future MARS plugin) could call `ALUCore.compute(op, a, b)` to get a result.
+### 5.8 `src/aluviz/ParsedInstruction.java`
 
-### 3.2.1 The `Op` enum
+Data class for parsed assembly instructions.
 
-Defines every operation our ALU supports, with its textbook 4-bit control code and human label:
+Responsibilities:
 
-```java
-public enum Op {
-    ADD("0010", "ADD"),
-    SUB("0110", "SUB"),
-    AND("0000", "AND"),
-    OR ("0001", "OR"),
-    XOR("1101", "XOR"),
-    NOR("1100", "NOR"),
-    SLT("0111", "SLT"),
-    SLL("1000", "SLL"),
-    SRL("1001", "SRL"),
-    SRA("1010", "SRA");
-    ...
-}
-```
+- Stores instruction kind
+- Stores mnemonic
+- Stores source and destination registers
+- Stores immediate values
+- Provides a human readable string representation
 
-These 4-bit codes are what the ALU control unit would put on the wires going into the ALU in a real MIPS datapath.
+### 5.9 `src/aluviz/InstructionParser.java`
 
-### 3.2.2 The `FullAdderStep` class
+Parses the instruction text entered by the user.
 
-Records what happened at one bit position during an addition. Captures: bit index, A bit, B bit, Cin, Sum bit, Cout. The `AdderSchematicPanel` reads a list of these to animate the schematic.
+Responsibilities:
 
-```java
-public static class FullAdderStep {
-    public final int index;
-    public final int a, b, carryIn;
-    public final int sum, carryOut;
-    ...
-}
-```
+- Parses R-type instructions: add, sub, and, or, slt
+- Parses addi
+- Parses lw and sw using offset(base) syntax
+- Converts register names to indices
+- Converts immediates from decimal and hex
 
-### 3.2.3 The `Result` class
+### 5.10 `src/aluviz/ExecutionStep.java`
 
-What `compute()` returns. Contains: the operation, the original operands, the *effective* operands (B might be inverted for SUB), the result, all four flags, and the per-bit trace (only filled for additions).
+Represents one atomic visual step.
 
-### 3.2.4 `compute(op, a, b)` — the dispatcher
+Responsibilities:
 
-A switch statement that routes to the right sub-routine. This is the single public entry point for the whole simulation.
+- Defines step types such as register read, immediate, ALU compute, memory read, memory write, writeback
+- Defines cycle steps such as IF, ID, EX, MEM, WB
+- Defines hazard related steps such as STALL, BUBBLE, FORWARD
+- Stores all values needed by the UI for animation and logging
 
-### 3.2.5 `doAdd(op, a, b, subtract)` — the heart of the ALU
+### 5.11 `src/aluviz/HazardDetector.java`
 
-This is where ripple-carry addition is implemented. Annotated:
+Analyzes dependencies between two instructions.
 
-```java
-private static Result doAdd(Op op, int a, int b, boolean subtract) {
-    int bEff = subtract ? mask(~b) : b;        // ← invert B for subtraction
-    int carry = subtract ? 1 : 0;              // ← carry-in is 1 for subtraction
-    List<FullAdderStep> trace = new ArrayList<>();
-    int sum = 0;
+Responsibilities:
 
-    for (int i = 0; i < WIDTH; i++) {          // ← loop bit 0 → bit 7
-        int ai = (a >> i) & 1;                 // ← extract bit i of A
-        int bi = (bEff >> i) & 1;              // ← extract bit i of (possibly inverted) B
-        int s    = ai ^ bi ^ carry;            // ← full adder Sum formula
-        int cOut = (ai & bi) | (carry & (ai ^ bi));  // ← full adder Cout formula
-        sum |= (s << i);                       // ← stitch bit s into the result
-        trace.add(new FullAdderStep(i, ai, bi, carry, s, cOut));
-        carry = cOut;                          // ← ripple the carry to next iteration
-    }
+- Detects RAW hazards
+- Detects load-use hazards
+- Returns the writer register and reading registers
+- Returns a short suggestion for the UI and log
 
-    int signA = (a    >> (WIDTH - 1)) & 1;     // ← MSB of A
-    int signB = (bEff >> (WIDTH - 1)) & 1;     // ← MSB of effective B
-    int signR = (sum  >> (WIDTH - 1)) & 1;     // ← MSB of result
-    boolean overflow = (signA == signB) && (signA != signR);
-    boolean carryOut = carry == 1;
-    boolean zero = sum == 0;
-    boolean negative = signR == 1;
-    return new Result(op, a, b, a, bEff, sum, zero, negative, carryOut, overflow, trace);
-}
-```
+### 5.12 `src/aluviz/InstructionExecutor.java`
 
-The loop body is literally a software full adder. Each iteration is one full-adder cell from the hardware diagram.
+Builds the instruction execution sequence.
 
-The overflow check uses the rule from §2.6: same-sign inputs producing opposite-sign result.
+Responsibilities:
 
-### 3.2.6 `doBitwise(op, a, b, r)` — for AND, OR, XOR, NOR
+- Turns a parsed instruction into a list of `ExecutionStep` objects
+- Adds cycle labels for IF, ID, EX, MEM, WB
+- Inserts stall and bubble steps for load-use hazards
+- Adds forwarding cue steps for other RAW hazards
+- Mutates machine state during execution
 
-Just stores the precomputed result and computes Z and N flags. No carry, no overflow concept for bitwise ops.
+### 5.13 `src/aluviz/DataFlowPanel.java`
 
-### 3.2.7 `doSlt(a, b)` — SLT
+Orchestrates the Data Flow tab.
 
-Calls `doAdd` in subtraction mode, then applies the rule:
+Responsibilities:
 
-```java
-int less = (sub.negative ^ sub.overflow) ? 1 : 0;
-```
+- Hosts the instruction input bar
+- Hosts the register file, ALU, and memory panels
+- Hosts the execution log
+- Hosts the pipeline stage view
+- Manages the animation timer
+- Calls the parser, hazard detector, and executor
+- Shows hazard banner text
+- Synchronizes stage highlight and value animations
 
-This is exactly what real ALU hardware does — it has an XOR gate fed by the sign bit and the overflow flag, and that single output bit is the SLT result.
+### 5.14 `src/aluviz/PipelineStagePanel.java`
 
-### 3.2.8 `doShift(op, a, b)` — SLL, SRL, SRA
+Shows the pipeline stage strip.
 
-Uses Java's shift operators after sign-extending for SRA:
+Responsibilities:
 
-```java
-int shamt = b & (WIDTH - 1);                   // ← only low bits of B matter (textbook uses 5 for 32-bit; here 3 for 8-bit)
-if      (op == Op.SLL) r = mask(a << shamt);
-else if (op == Op.SRL) r = (a & mask(0xFFFFFFFF)) >>> shamt;
-else { // SRA — sign-extend first
-    int signed = (a << (32 - WIDTH)) >> (32 - WIDTH);   // sign-extend 8-bit to 32-bit
-    r = mask(signed >> shamt);                          // arithmetic shift, then mask back
-}
-```
+- Displays IF, ID, EX, MEM, WB
+- Displays STALL, BUBBLE, and FORWARD cues
+- Highlights the current active stage
+- Shows the current instruction and hazard summary
 
-The `>>>` operator is Java's logical right shift; `>>` is arithmetic. The sign extension trick: shift left by 24, then arithmetic-shift right by 24, which propagates the original bit-7 (the 8-bit sign bit) through bits 8-31.
+### 5.15 `src/aluviz/RegisterFilePanel.java`
 
-### 3.2.9 Utility methods
+Visualizes the 32-register file.
 
-- `mask(v)`: chops `v` down to 8 bits.
-- `toBinary(v)`: formats a value as 8-character binary string for display.
-- `parseOperand(s)`: parses input text accepting decimal, `0xHH` hex, `0bBBBBBBBB` binary, or 8-character binary without prefix.
+Responsibilities:
 
-## 3.3 `MainPanel.java` — the main UI shell
+- Displays registers in a grid
+- Supports register editing by clicking a cell
+- Highlights read registers
+- Highlights written registers
+- Highlights registers involved in a hazard
 
-This is the root Swing panel that fills the JFrame. It uses a `BorderLayout`:
+### 5.16 `src/aluviz/MemoryPanel.java`
 
-- **NORTH**: input section (operands, operation dropdown, animation speed, Compute button).
-- **CENTER**: a `CardLayout` panel that swaps between the schematic adder view and the register view based on which operation is selected.
-- **SOUTH**: three side-by-side panels — Result display, Status Flags display, ALU Control display.
+Visualizes data memory.
 
-### Key methods in `MainPanel`
+Responsibilities:
 
-**`buildTop()`**: assembles the operand input section using `GridBagLayout`. Creates `JTextField`s for A and B, a `JComboBox` for the operation, a `JSlider` for animation speed, and the Compute button.
+- Displays memory rows with addresses and values
+- Shows ASCII interpretation of each word
+- Highlights memory read and write operations
+- Supports automatic scrolling to active addresses
 
-**`buildBottom()`**: assembles the bottom three side-by-side panels. The flags panel contains four `FlagLamp` instances (one per flag).
+### 5.17 `src/aluviz/MiniALUPanel.java`
 
-**`updateControlPreview()`**: called whenever the user changes the operation in the dropdown. Updates the 4-bit ALU control signal display so the user can see the control code even before clicking Compute.
+Compact ALU summary view used inside the Data Flow tab.
 
-**`onRun(ActionEvent)`**: the Compute button handler. Steps:
-1. Parse the two operands via `ALUCore.parseOperand`. If parsing throws, show an error dialog.
-2. Call `ALUCore.compute(op, a, b)` to get the result.
-3. Call `showResult(r)` to update the bottom panel.
-4. Decide which visualization to show: schematic (for ADD/SUB/SLT) or register view (for everything else). Use `CardLayout.show()` to swap, then call the panel's `animate(r, speed)`.
+Responsibilities:
 
-**`showResult(r)`**: updates the binary/decimal/hex result labels, the four flag lamps, and the ALU control bits. The signed decimal conversion is done by checking the MSB and subtracting `2^WIDTH` if it's set.
+- Displays operation name
+- Displays inputs and result
+- Displays flags
+- Provides the Open Internals button
+- Communicates with the main ALU tab
 
-### The `FlagLamp` inner class
+### 5.18 `src/aluviz/ExecutionLogPanel.java`
 
-A small custom Swing panel that displays one flag name in big bold text with a description below. Has a `setOn(boolean)` method that switches the background to yellow when active or gray when inactive. The visual metaphor is a real status LED on a circuit board.
+Text log for the data flow execution.
 
-## 3.4 `AdderSchematicPanel.java` — the centerpiece visualization
+Responsibilities:
 
-This is the schematic view used for ADD, SUB, and SLT. It draws 8 full-adder cells in a row, each with visible XOR and AND/OR gate boxes, and animates them lighting up one by one as the carry ripples from LSB to MSB.
+- Logs each instruction
+- Logs each step
+- Logs hazard messages
+- Logs cycle notes
+- Provides a simple narrative of what the CPU is doing
 
-### Animation mechanism
+### 5.19 `src/aluviz/WireAnimation.java`
 
-The animation uses a `javax.swing.Timer`. The timer fires every `delay` milliseconds (computed from the user's speed slider). On each tick, it increments `highlightedBit` and calls `repaint()`. The `paintComponent()` method redraws all 8 cells, but only cells with `index <= highlightedBit` are drawn in the "active" colors (blue/green); the rest are drawn faded gray. When `highlightedBit` reaches 8, the timer stops.
+Represents one moving value bubble.
 
-This is the classic Swing animation pattern: a Timer drives state changes, `repaint()` triggers re-rendering, and `paintComponent` reads the current state to decide what to draw.
+Responsibilities:
 
-### `paintComponent(Graphics g0)`
+- Stores source and destination points
+- Stores animation label and color
+- Calculates progress over time
+- Applies easing for smoother motion
 
-The main drawing routine. After casting to `Graphics2D` and enabling anti-aliasing:
+### 5.20 `src/aluviz/WiresOverlay.java`
 
-1. If `current` is null (no computation done yet), draw a help message.
-2. Draw a title at the top describing the operation (e.g., "SUB — A + (~B) + 1   (reuses the adder by inverting B and carry-in = 1)" if this is a subtraction).
-3. Draw row labels at the left (A, B, Cin, Sum).
-4. Loop over the 8 bit positions and call `drawFullAdder()` for each, placing bit 0 on the far right and bit 7 on the far left (standard schematic convention).
-5. Draw the final Cout arrow on the far left of the chain.
-6. Draw the summary text at the bottom — A, effective B (showing the inversion for SUB), and the result, all in binary.
+Draws wiring and the active animated bubble.
 
-### `drawFullAdder(...)`
+Responsibilities:
 
-Draws one full adder cell. Contents:
-- A rounded rectangle for the cell border (blue if active, gray if inactive).
-- The bit index label above the cell.
-- The two input bits (A, B) at the top, the carry-in arrow at the right.
-- Two gate boxes inside: an "XOR" box (sum gate) and an "AND/OR" box (carry gate).
-- The Sum bit at the bottom.
-- The Cout arrow exiting on the left, with the arrow tip filled.
+- Renders static connector lines
+- Renders the active wire path
+- Renders the moving value bubble on top of the datapath
 
-Active cells use saturated colors (green for 1, gray for 0). Inactive cells (those the carry hasn't reached yet) are faded. The Cout arrow is red when the carry is 1, gray when 0 — making the ripple-carry chain visually obvious.
+## 6. Execution Flow
 
-## 3.5 `RegisterViewPanel.java` — visualization for bitwise ops and shifts
+This section explains what happens when a user runs the application.
 
-Used for AND, OR, XOR, NOR, SLL, SRL, SRA. The visual style is different from the schematic: instead of showing gates explicitly, it shows the operand bits as a row of boxes, the gate operation as a row of gate boxes between A and B, and the result as a third row.
+### 6.1 Application startup
 
-### `paintComponent(Graphics g0)`
+1. `Main.main()` starts the Swing UI.
+2. `AppPanel` creates the two tabs.
+3. `MainPanel` and `DataFlowPanel` are initialized.
+4. The application waits for the user to choose a tab and start a demo.
 
-Dispatches to `drawBitwise()` or `drawShift()` depending on the operation.
+### 6.2 ALU Internals flow
 
-### `drawBitwise(Graphics2D g)`
+1. The user enters two operands.
+2. The user selects an operation.
+3. `ALUCore.parseOperand()` converts input text into an 8-bit integer.
+4. `ALUCore.compute()` performs the chosen operation.
+5. The result and flags are shown.
+6. The appropriate visual panel animates the computation.
 
-Layout:
-```
-A      [0][1][1][0][1][1][0][0]
-B      [1][0][1][0][1][1][1][1]
-        AND AND AND AND AND AND AND AND     ← row of gate boxes
-Result [0][0][1][0][1][1][0][0]
-        Truth table:  0·0=0  0·1=0  1·0=0  1·1=1
-```
+### 6.3 Data Flow flow
 
-Each gate box is animated — bits and the gate light up one-by-one from right (bit 0) to left (bit 7), reinforcing that this is a bitwise (per-bit independent) operation. The truth table at the bottom is a textbook reminder.
+1. The user selects or types a MIPS-like instruction.
+2. `InstructionParser.parse()` converts the text into a `ParsedInstruction`.
+3. `HazardDetector.analyze()` checks the new instruction against the previously completed instruction.
+4. `InstructionExecutor.plan()` creates the cycle and data movement steps.
+5. `DataFlowPanel` sends the plan to the stage panel and log.
+6. `ExecutionStep` objects are played one by one.
+7. Register file, ALU, memory, and wires update visually.
+8. The machine state is updated at the correct writeback step.
 
-### `drawShift(Graphics2D g)`
+### 6.4 Hazard flow
 
-Layout:
-```
-A (input)   [1][1][1][1][0][0][0][0]
-             ←  ←  ←  ←  ←  ←  ←        ← arrows showing direction
-Result      [1][1][1][1][1][1][0][0]    (for SRA by 2)
-```
+1. The previous instruction wrote to a register.
+2. The next instruction reads that same register.
+3. `HazardDetector` marks the dependency.
+4. `DataFlowPanel` shows a hazard banner.
+5. `ExecutionLogPanel` prints a hazard message.
+6. `RegisterFilePanel` highlights the involved registers.
+7. `InstructionExecutor` inserts a stall and bubble for load-use hazards.
+8. `PipelineStagePanel` shows the stall inserted into the stage flow.
 
-For SRA, an extra note at the bottom says "Sign bit (MSB) was 1 — SRA fills vacated MSBs with that." This is the visual proof that arithmetic shift preserves sign.
+## 7. Algorithms Used
 
-### Helper methods
+### 7.1 Ripple-carry addition
 
-- **`drawLabeledRow`**: draws a row label, 8 bit cells, and the decimal value at the right.
-- **`drawBitCell`**: draws one bit box with the bit value and a small "bit i" index. Green if the bit is 1, gray if 0; faded if not yet activated by the animation.
-- **`drawGateBox`**: draws a gate box with a label like "AND" or "XOR" inside.
-- **`truthTable(op)`**: returns the truth table string for the current bitwise op.
+The adder works bit by bit from least significant bit to most significant bit. Each bit uses the carry from the previous bit. This is the simplest correct hardware model and matches classroom diagrams well.
 
----
+### 7.2 Two's complement subtraction
 
-# 4. End-to-end data flow
+Subtraction is implemented as:
 
-What happens between clicking the **Compute & Animate** button and seeing the result:
+`A - B = A + (~B) + 1`
 
-```
-1.  User types A = "0b00001101", B = "0b00000110", selects ADD, clicks Compute.
-                                    │
-                                    ▼
-2.  MainPanel.onRun() runs on the Event Dispatch Thread.
-                                    │
-                                    ▼
-3.  ALUCore.parseOperand("0b00001101")  →  13
-    ALUCore.parseOperand("0b00000110")  →  6
-                                    │
-                                    ▼
-4.  ALUCore.compute(Op.ADD, 13, 6)  →  doAdd(ADD, 13, 6, false)
-       Loop runs 8 times. At each bit i:
-         ai = bit i of 13
-         bi = bit i of 6
-         sum_bit = ai XOR bi XOR carry
-         cOut    = (ai AND bi) OR (carry AND (ai XOR bi))
-         trace.add(FullAdderStep(i, ai, bi, carry, sum_bit, cOut))
-         carry = cOut
-       Builds the result (19 = 0b00010011), computes flags
-       (Z=0, N=0, C=0, V=0), returns Result with full trace.
-                                    │
-                                    ▼
-5.  MainPanel.showResult(r)
-       resultBin.setText("00010011")
-       resultDec.setText("19  (signed: 19)")
-       resultHex.setText("0x13")
-       lampZ.setOn(false); lampN.setOn(false); ...
-       controlBits.setText("0010")
-                                    │
-                                    ▼
-6.  Op is ADD, so vizLayout.show(vizCard, "adder")
-    adderPanel.animate(r, speedSlider.getValue())
-                                    │
-                                    ▼
-7.  AdderSchematicPanel.animate
-       current = r
-       highlightedBit = -1
-       Start a Swing Timer firing every (900 - speed) ms.
-       Each tick:  highlightedBit++; repaint()
-       Stop when highlightedBit reaches WIDTH (8).
-                                    │
-                                    ▼
-8.  paintComponent() runs on each repaint.
-    Loops bit 0..7, calls drawFullAdder() for each.
-    Cells with index <= highlightedBit drawn in saturated colors;
-    others drawn faded. Carry arrows drawn red (1) or gray (0).
-                                    │
-                                    ▼
-9.  User sees the carry ripple from right to left.
-    When the animation completes, all 8 cells are fully lit
-    and the result row at the bottom shows the binary sum.
+This lets one adder handle both add and subtract.
+
+### 7.3 Signed overflow detection
+
+Signed overflow is detected when the sign of the two operands matches and the sign of the result differs.
+
+### 7.4 Hazard detection
+
+The hazard detector follows a simple dependency rule:
+
+- Find the destination register of the previous instruction.
+- Collect the source registers of the current instruction.
+- If they overlap, a RAW hazard exists.
+- If the previous instruction was a load, classify it as a load-use hazard.
+
+### 7.5 Automatic stall insertion
+
+For a load-use hazard, the executor inserts:
+
+- a STALL cycle
+- a BUBBLE cycle
+
+This models the extra waiting time needed before the dependent instruction can safely continue.
+
+## 8. User Interface Design
+
+The interface is intentionally structured for clarity.
+
+### 8.1 Color and layout choices
+
+- Light background surfaces reduce visual noise
+- Blue is used for active normal stages
+- Orange and red are used for hazard-related warnings
+- Panels are separated by borders and headers for readability
+
+### 8.2 Why the UI is report friendly
+
+The panels clearly separate different architectural components:
+
+- Register file
+- ALU
+- Memory
+- Log
+- Pipeline stage strip
+
+This makes it easy to explain each CPU unit in a presentation.
+
+## 9. Demo and Test Scenarios
+
+The project is ready for classroom demonstrations. These are the best sample cases.
+
+### 9.1 Basic ALU demo
+
+- `0b00001101` and `0b00000110` with ADD
+- Shows ripple carry and a normal positive result
+
+### 9.2 Overflow demo
+
+- `127` and `1` with ADD
+- Shows signed overflow and the V flag
+
+### 9.3 Subtraction demo
+
+- `10` and `3` with SUB
+- Shows two's complement subtraction
+
+### 9.4 Logic demo
+
+- `0xCC` and `0xF0` with AND or XOR
+- Shows bitwise logic behavior
+
+### 9.5 Shift demo
+
+- `0b11110000` with SRA and SRL
+- Shows the difference between logical and arithmetic shift right
+
+### 9.6 Hazard demo
+
+Use the following pair in the MIPS Data Flow tab:
+
+```asm
+lw  $t0, 0($t4)
+add $t2, $t0, $t3
 ```
 
-The same flow works for every operation. Only step 6 differs — for bitwise ops and shifts, `registerPanel` is shown instead of `adderPanel`.
+Expected result:
 
----
+- Hazard banner appears
+- Execution log shows a hazard message
+- Register file highlights the dependency
+- Pipeline stage strip shows a stall and bubble for load-use hazard
 
-# 5. Likely viva questions and how to answer them
+## 10. Build and Run Instructions
 
-**Q: Why is the ALU important?**
-A: It's the part of the processor that actually performs arithmetic and logic. Every MIPS instruction that does any computation — `add`, `sub`, `and`, `or`, `slt`, `lw`/`sw` (for address calculation), `beq` (for the zero comparison), even `jal` (for PC+4) — uses the ALU.
+Compile from the project root:
 
-**Q: What does your visualizer show that a normal MARS simulation does not?**
-A: MARS shows the ALU as a black box: you see `$rd` updated after `add $rd, $rs, $rt` runs, but nothing about how that addition happened. Our tool shows the internal full adders, the carry propagation, the gates, and how subtraction and SLT reuse the same adder hardware.
-
-**Q: What is two's complement and why does it matter for the ALU?**
-A: Two's complement is the encoding for signed integers where negating a number means inverting every bit and adding 1. It matters because it lets one adder hardware handle both addition and subtraction. Subtraction `A - B` becomes `A + (~B) + 1` — just invert B and set the carry-in to 1.
-
-**Q: What's the difference between carry-out and overflow?**
-A: Carry-out is an unsigned concept — it indicates that the unsigned sum exceeded the largest representable unsigned value. Overflow is a signed concept — it indicates that the signed sum stepped outside the representable signed range. They're set by different conditions and used for different things. For example, `0xFF + 0x01 = 0x00` produces carry-out (unsigned overflow) but no signed overflow because `-1 + 1 = 0` is correct in signed math.
-
-**Q: Why is SLT done using subtraction?**
-A: Because the sign of `A - B` tells you which is bigger. If `A - B < 0` then `A < B`. The XOR-with-overflow correction is needed because if signed overflow happens during the subtraction, the sign bit lies — XORing with the overflow flag corrects for it.
-
-**Q: Why does SRA exist when SRL already does right shift?**
-A: SRL fills the new high bits with 0, which is correct only if the operand is unsigned. For a signed negative number, that destroys the sign. SRA fills with the original sign bit, which keeps the number negative. SRA on a signed value is equivalent to dividing by 2^shamt (rounding toward negative infinity).
-
-**Q: How does the ALU know which operation to perform?**
-A: A 4-bit control signal called the ALU operation code. This signal is generated by the **ALU control unit**, which takes a 2-bit ALUOp signal from the main control unit (which only distinguishes broad instruction categories like R-type, load/store, branch) and the 6-bit funct field from the instruction (which distinguishes specific R-type operations).
-
-**Q: What's the difference between single-cycle and multi-cycle datapaths in terms of the ALU?**
-A: Single-cycle uses the ALU exactly once per instruction. Multi-cycle uses the same ALU multiple times across stages — IF (PC+4), EX (the actual operation or branch target), MEM (effective address). Single-cycle has one long clock cycle; multi-cycle has shorter cycles but more of them per instruction.
-
-**Q: What would it take to make this a 32-bit ALU?**
-A: Change the `WIDTH` constant in `ALUCore` from 8 to 32, and adjust the screen layout in `AdderSchematicPanel` and `RegisterViewPanel`. The simulation logic already uses `WIDTH` everywhere, so no code changes there. The visualization would need a horizontal scroll bar since 32 cells won't fit on a single screen.
-
-**Q: Why isn't this integrated with MARS?**
-A: It could be — MARS has a `mars.tools.AbstractMarsToolAndApplication` API for plugins that observe a running MIPS program. The `ALUCore` class is intentionally decoupled from the GUI so that a future plugin could call `ALUCore.compute()` whenever it detects an ALU instruction in the MARS execution trace. For the current scope of the lab project, the standalone tool was simpler and sufficient.
-
-**Q: What's the biggest CA concept this project does *not* cover?**
-A: Multiplication and division. Booth's algorithm (signed multiplication) and restoring division are typically separate, larger circuits inside an ALU. We scoped them out for time. The rest of the ALU — arithmetic, logical, shifts, comparison — is fully covered.
-
----
-
-# 6. The Data Flow Tab (project expansion)
-
-After the ALU Internals tool was reviewed as "too basic," we extended the project with a second tab: the **MIPS Data Flow Visualizer**. It uses the ALU we already built as the centerpiece of a fuller animated execution view — showing where operands come from (the register file), where the result goes (back to the register file, or to data memory), and animating value-blobs traveling along wires between the three boxes.
-
-## 6.1 What the Data Flow tab shows
-
-For any of these instructions:
-- `add`, `sub`, `and`, `or`, `slt` (R-type)
-- `addi` (I-type arithmetic)
-- `lw` (load word)
-- `sw` (store word)
-
-…the tab animates the data flow step by step:
-
-1. **Register read**: the cell of the source register (`$rs`, `$rt`) glows blue in the register file panel, and a yellow value-blob slides along a wire to the ALU's input port.
-2. **Immediate** (for I-type): a purple blob appears near the ALU's input B with the sign-extended immediate value.
-3. **ALU compute**: the ALU panel glows orange, displays the operation, and the result appears with its status flags (Z, N, C, V).
-4. **Memory access** (for `lw`/`sw` only): a blob carries the computed address from the ALU to the memory panel; the active memory row glows green (read) or pink (write).
-5. **Writeback**: a blob carries the final value back to the destination register, which glows orange and updates its displayed value.
-
-A scrolling execution log at the bottom captures each step in text form, so the instructor sees the same story two ways: visually (animations) and textually (log).
-
-## 6.2 Why this extension matters
-
-The original ALU Internals tab answered: "How does the ALU compute the operation at the gate level?"
-The Data Flow tab answers: "Where does the ALU's operand come from, and where does the result go?"
-
-Together they cover:
-- **Instruction formats** — the input bar accepts MIPS assembly; the executor decodes R-type vs I-type vs load/store and reads the corresponding fields (`rs`, `rt`, `rd`, `immediate`).
-- **Datapath components** — the three main visible components in the textbook single-cycle datapath are present: **register file**, **ALU**, **data memory**.
-- **Data flow** — animated wires show how values travel between components, which is the literal definition of "data path."
-- **Hardware reuse** — the ALU is used for both arithmetic (`add`) and address calculation (`lw`/`sw`), demonstrating that the same physical ALU serves multiple instruction types.
-- **Cross-tab linking** — the "Open Internals →" button hands the current operation to Tab 1, letting the instructor see the same ADD instruction *both* at the data-flow level and at the gate-level view.
-
-## 6.3 New code — file by file
-
-### `AppPanel.java`
-Root content pane that hosts the two tabs (a `JTabbedPane`). Provides `showALUInternals()` and `showDataFlow()` methods so panels can switch tabs programmatically (used by the "Open Internals" button).
-
-### `MachineState.java`
-The simulated machine state: 32 registers (with `$zero` hardwired to 0) and a sparse `Map<address, value>` memory. Comes pre-seeded with demo values:
-- `$t1 = 10`, `$t2 = 6`, `$t3 = -3`, `$t4 = 0x1000` (memory base), `$t5 = 0xFF`
-- Memory at `0x1000` = `0xDEADBEEF`, `0x1004` = `0x12345678`, etc.
-
-Static utilities `regName(idx)` and `regIndex(name)` convert between register indices and MIPS conventional names like `$t0`, `$sp`, `$ra`, etc.
-
-### `ParsedInstruction.java`
-A structured representation of one MIPS instruction. Fields: `kind` (R_TYPE / I_TYPE_ARITH / LOAD / STORE), `mnemonic`, `aluOp`, `rs`, `rt`, `rd`, `immediate`.
-
-### `InstructionParser.java`
-Hand-rolled parser for a small MIPS subset. Switches on the mnemonic, calls one of three sub-parsers (`parseRType`, `parseITypeArith`, `parseMemory`), produces a `ParsedInstruction`. Accepts `0x` hex, `0b` binary, or decimal immediates including negatives.
-
-### `ExecutionStep.java`
-One step in the animation. Has a `Type` enum (`READ_REG`, `IMMEDIATE`, `ALU_COMPUTE`, `MEM_READ`, `MEM_WRITE`, `WRITEBACK`) plus the fields each type needs (register index, address, value, ALU op, port name, etc.). Static factory methods (`readReg`, `immediate`, `aluCompute`, `memRead`, `memWrite`, `writebackFromALU`, `writebackFromMem`) build them.
-
-### `InstructionExecutor.java`
-The bridge between a `ParsedInstruction` + `MachineState` and a list of `ExecutionStep`s. For each instruction kind it emits the appropriate sequence:
-- R-type → READ_REG (rs, A), READ_REG (rt, B), ALU_COMPUTE, WRITEBACK (rd)
-- I-type arith → READ_REG (rs, A), IMMEDIATE, ALU_COMPUTE, WRITEBACK (rt)
-- Load → READ_REG (rs, A), IMMEDIATE, ALU_COMPUTE (address), MEM_READ, WRITEBACK from MEM
-- Store → READ_REG (rs, A), IMMEDIATE, ALU_COMPUTE (address), READ_REG (rt as data), MEM_WRITE
-
-It also mutates the `MachineState` so that subsequent instructions see the result.
-
-### `RegisterFilePanel.java`
-The 32-register grid. 4 rows × 8 columns. Each cell shows the register number, current hex value, and conventional name. Methods `markRead(idx, port)`, `markWrite(idx, value)`, `clearHighlights()`, `refreshAll()`. Clicking a cell opens a dialog to edit its value (except `$zero`).
-
-### `MemoryPanel.java`
-Scrollable list of word-aligned memory rows with address, value, and ASCII columns. Methods `markRead(addr)`, `markWrite(addr, value)`, `clearHighlights()`. Auto-scrolls so the active address is visible.
-
-### `MiniALUPanel.java`
-A compact ALU representation for this tab. Shows operands, operation name, result, and flag lamps. The **"Open Internals →"** button triggers a callback (wired by `DataFlowPanel`) that switches the JTabbedPane back to Tab 1 with the same operands and operation.
-
-### `ExecutionLogPanel.java`
-Scrolling `JTextArea` with an instruction header line, then numbered steps. Automatically scrolls to the bottom as new steps arrive.
-
-### `WireAnimation.java`
-One in-flight animation. Holds source point, destination point, value label, color, duration. Tracks elapsed time and exposes `easedProgress()` (ease-in-out using a cosine curve) and `currentPos()` (interpolated point). One animation = one moving value-blob.
-
-### `WiresOverlay.java`
-Transparent JPanel that sits on top of the central content via a `JLayeredPane`. In `paintComponent`, draws static wires (light gray, if configured) and the current active `WireAnimation` — the wire highlighted in amber, plus a pill-shaped blob with the value text traveling along it.
-
-### `DataFlowPanel.java`
-The orchestrator. Holds all six new GUI panels, the instruction bar (combo + text field + speed slider + Run/Step/Reset buttons), the `WiresOverlay`, and the animation state machine:
-- `pendingSteps` — the list of steps for the current instruction
-- `stepCursor` — which step we're on
-- `currentAnim` — the in-flight `WireAnimation`
-- A 16ms `Timer` advances the animation each frame; when it completes, `advanceToNextStep()` moves on
-
-The `Run` button plays all steps automatically; `Step` advances one at a time. `Reset` restores `MachineState` to its initial values and clears the log.
-
-## 6.4 Animation flow per instruction
-
-### `add $t0, $t1, $t2`
-1. `$t1` cell glows blue → blob travels along top wire to ALU input A
-2. `$t2` cell glows blue → blob travels along bottom wire to ALU input B
-3. ALU box glows orange → result computed (16), flags update
-4. Result blob travels along writeback wire → `$t0` cell glows orange and updates to 16
-
-### `addi $t0, $t1, 5`
-1. `$t1` cell glows blue → blob to ALU input A
-2. Purple "imm" blob appears at ALU input B (representing sign-extended immediate)
-3. ALU glows orange → result 15
-4. Writeback to `$t0`
-
-### `lw $t0, 4($t4)`
-1. `$t4` cell glows blue → blob (0x1000) to ALU input A
-2. Purple "imm" blob (4) to ALU input B
-3. ALU computes address 0x1004
-4. Address blob (green) travels to memory; row at 0x1004 glows green; value 0x12345678 is read
-5. Writeback blob (orange) travels from memory back to `$t0`; cell glows orange with new value
-
-### `sw $t1, 12($t4)`
-1. `$t4` cell glows blue → blob to ALU input A
-2. Purple "imm" blob (12) to ALU input B
-3. ALU computes address 0x100C
-4. `$t1` cell glows blue → data blob (pink) goes around the ALU toward memory
-5. Address blob (pink) reaches memory; row at 0x100C glows pink with the new value
-
-## 6.5 Demo script for the new tab
-
-1. Open the tool, switch to **MIPS Data Flow** tab.
-2. Pick `add $t0, $t1, $t2` from the dropdown, hit **Run**. Point out: $t1 lights up, blob travels, ALU lights up, result appears, blob goes back to $t0. *That's the R-type data path.*
-3. Pick `addi $t0, $t1, 5`. Point out the purple immediate blob appearing at input B instead of a second register read. *That's the I-type data path.*
-4. Pick `lw $t0, 4($t4)`. Point out the address calculation in the ALU, then the green blob to memory, then the orange writeback. *That's the load data path.*
-5. Pick `sw $t1, 12($t4)`. Point out that nothing writes back to the register file — only memory updates. *That's the store data path.*
-6. With the result still on screen, click **"Open Internals →"** in the ALU panel. Switches to Tab 1 with the same operands. *Now we see the same ADD operation at the gate level — full adders, carry propagation, the works.*
-
-That's a complete narrative: instruction → format decode → component activation → ALU operation → writeback, plus the ability to drill into the ALU's internals on demand.
-
-# Quick reference — file map
-
-```
-src/aluviz/
-│
-├── ── Bootstrap ──
-├── Main.java                   Entry point: creates JFrame, sets up Swing
-├── AppPanel.java               Tab host (ALU Internals + MIPS Data Flow)
-│
-├── ── Tab 1: ALU Internals ──
-├── MainPanel.java              Inputs, results, flags, ALU control display
-├── ALUCore.java                Pure simulation: full adder, all ops, flags, trace
-├── AdderSchematicPanel.java    Schematic view (ADD/SUB/SLT) with visible gates
-├── RegisterViewPanel.java      Register view (AND/OR/XOR/NOR/shifts)
-│
-├── ── Tab 2: MIPS Data Flow ──
-├── DataFlowPanel.java          Orchestrator + instruction bar + animation state machine
-├── MachineState.java           Simulated 32 registers + sparse memory
-├── ParsedInstruction.java      Structured MIPS instruction
-├── InstructionParser.java      Assembly text → ParsedInstruction
-├── ExecutionStep.java          One animation/log step
-├── InstructionExecutor.java    ParsedInstruction + MachineState → step sequence
-├── RegisterFilePanel.java      32-register grid with read/write highlights
-├── MemoryPanel.java            Scrollable memory view, read/write highlights
-├── MiniALUPanel.java           Compact ALU view + "Open Internals" button
-├── ExecutionLogPanel.java      Scrolling step log
-├── WireAnimation.java          One in-flight value-blob (ease-in-out)
-└── WiresOverlay.java           Transparent overlay drawing animated wires
+```bat
+javac -d out src\aluviz\*.java
+java -cp out aluviz.Main
 ```
 
-# Quick reference — operation table
+If the environment supports the existing build script, it can also be used for packaging.
 
-| Op  | ALU code | Internal mechanism |
-|-----|----------|-------------------|
-| ADD | 0010     | Ripple-carry add of A and B with Cin=0 |
-| SUB | 0110     | Ripple-carry add of A and (~B) with Cin=1 |
-| AND | 0000     | Bit-by-bit AND |
-| OR  | 0001     | Bit-by-bit OR |
-| XOR | 1101     | Bit-by-bit XOR |
-| NOR | 1100     | Bit-by-bit NOR |
-| SLT | 0111     | Subtract then output (N XOR V) |
-| SLL | 1000     | Shift left, fill with 0 |
-| SRL | 1001     | Shift right unsigned, fill with 0 |
-| SRA | 1010     | Shift right signed, fill with sign bit |
+## 11. Current Scope and Limitations
 
-# Quick reference — flag table
+The project is intentionally scoped for a final semester demo.
 
-| Flag | When set | Used by |
-|------|----------|---------|
-| Z (Zero) | Result == 0 | `beq`, `bne` |
-| N (Negative) | MSB of result is 1 | branch-on-less-than expansions, SLT |
-| C (Carry) | Carry rippled out of MSB | unsigned overflow detection |
-| V (Overflow) | Same-sign inputs, opposite-sign result | signed overflow detection, SLT correction |
+Current limitations:
+
+- The ALU is 8-bit instead of 32-bit for readability
+- The simulation is educational rather than a full hardware-accurate CPU emulator
+- It does not implement the entire MIPS instruction set
+- Branch and jump handling are not the main focus yet
+- The pipeline stage strip is a pedagogical view rather than a full cycle-accurate simulator for overlapping instructions
+
+These are not weaknesses for the project report. They are design choices that keep the tool understandable and demo-friendly.
+
+## 12. Future Enhancements
+
+If more time is available, the next improvements could be:
+
+- Branch and jump visualization
+- Full forwarding path controls
+- Explicit register forwarding toggle
+- More instructions such as `beq`, `bne`, `andi`, `ori`
+- Test suite for parser, ALU, and hazard detection
+- Export of execution trace as a report or JSON file
+
+## 13. Contributors
+
+- [abdullahxdev](https://github.com/abdullahxdev)
+- [saadhtiwana](https://github.com/saadhtiwana)
+- [ahmadmustafa02](https://github.com/ahmadmustafa02)
+
+## 14. Short Report Summary
+
+Bitsmith is an interactive MIPS ALU and datapath visualizer that demonstrates arithmetic, logic, shifts, register flow, memory flow, control signals, cycle stages, and hazard handling. The project is written in Java Swing and is suitable for a Computer Architecture final project because it connects textbook concepts with visible, animated behavior.
+
+Signed by saadhtiwana
+
+## 15. Detailed Viva Walkthrough of the Code
+
+This section is written so a student can revise the whole project directly from the document. It explains the logic of the source files in a line-by-line style, but grouped by meaning so it is easier to study and remember during viva.
+
+### 15.1 `Main.java` line-by-line logic
+
+The role of `Main.java` is only to start the application.
+
+1. `public class Main` declares the entry class.
+2. `public static void main(String[] args)` is the Java entry point.
+3. `UIManager.setLookAndFeel(...)` tells Swing to use the system theme.
+4. The `try/catch` protects the app if the look-and-feel is unavailable.
+5. `SwingUtilities.invokeLater(...)` moves UI creation onto the Event Dispatch Thread.
+6. Inside the lambda, a `JFrame` is created with the title of the project.
+7. `setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE)` closes the app fully when the window closes.
+8. `setContentPane(new AppPanel())` loads the whole application UI.
+9. `pack()` sizes the frame according to the preferred sizes of panels.
+10. `setLocationRelativeTo(null)` centers the window.
+11. `setMinimumSize(...)` prevents the window from becoming too small.
+12. `setVisible(true)` finally displays the application.
+
+Viva line: `Main.java` does not perform ALU logic itself. It only starts the Swing interface safely.
+
+### 15.2 `AppPanel.java` line-by-line logic
+
+`AppPanel` is the root panel that holds the two tabs.
+
+1. `extends JPanel` means it is a reusable Swing container.
+2. `private final MainPanel aluInternalsPanel;` stores the ALU tab.
+3. `private final DataFlowPanel dataFlowPanel;` stores the datapath tab.
+4. `private final JTabbedPane tabs;` creates the tab control.
+5. In the constructor, `super(new BorderLayout())` sets the layout.
+6. `aluInternalsPanel = new MainPanel();` creates the ALU internals UI.
+7. `dataFlowPanel = new DataFlowPanel();` creates the datapath UI.
+8. `dataFlowPanel.setAppPanel(this);` gives the child panel a reference back to switch tabs.
+9. `tabs = new JTabbedPane(JTabbedPane.TOP);` places tabs at the top.
+10. `tabs.setFont(...)` makes the tab text bold and readable.
+11. `tabs.addTab("ALU Internals", aluInternalsPanel);` adds the first tab.
+12. `tabs.addTab("MIPS Data Flow", dataFlowPanel);` adds the second tab.
+13. `add(tabs, BorderLayout.CENTER);` puts the tabbed pane into the root panel.
+14. `showALUInternals()` changes the selected tab to index 0.
+15. `showDataFlow()` changes the selected tab to index 1.
+
+Viva line: `AppPanel` is the switchboard of the whole application.
+
+### 15.3 `MainPanel.java` line-by-line logic
+
+`MainPanel` is the ALU Internals screen.
+
+1. Text fields `fieldA` and `fieldB` store operand input.
+2. `opCombo` gives the user the ALU operation choices.
+3. `speedSlider` controls animation speed.
+4. `runBtn` starts the computation and animation.
+5. `resultBin`, `resultDec`, `resultHex` display the final answer in three formats.
+6. `lampZ`, `lampN`, `lampC`, `lampV` are the four custom status indicators.
+7. `controlBits` and `controlOpName` show the ALU control code and name.
+8. `adderPanel` and `registerPanel` are the two visualization modes.
+9. `vizLayout` is a `CardLayout`, so only one visualization is visible at a time.
+10. In the constructor, the panel uses a `BorderLayout`.
+11. `buildTop()` creates the operand and operation entry area.
+12. `buildBottom()` creates the result, flags, and control-signal area.
+13. `vizCard` stores the schematic and register visualization panels.
+14. `runBtn.addActionListener(this::onRun);` binds the button to the run logic.
+15. `opCombo.addActionListener(...)` updates the control preview whenever the operation changes.
+16. `updateControlPreview()` copies the selected operation's 4-bit control code and label into the UI.
+
+Important logic in `onRun(ActionEvent e)`:
+
+1. Read text from the A and B fields.
+2. Use `ALUCore.parseOperand(...)` to convert the text to integers.
+3. If parsing fails, show a warning dialog and stop.
+4. Get the selected ALU operation from `opCombo`.
+5. Call `ALUCore.compute(op, a, b)`.
+6. Pass the result to `showResult(r)`.
+7. If the operation is ADD, SUB, or SLT, show the schematic panel.
+8. For logic and shift operations, show the register-style panel.
+9. Start the selected panel animation with the slider speed.
+
+Important logic in `showResult(ALUCore.Result r)`:
+
+1. `ALUCore.toBinary(r.result)` formats the result as an 8-bit binary string.
+2. Signed decimal is derived from the MSB if the result is negative.
+3. Hex is formatted with `String.format("0x%02X", r.result)`.
+4. Each flag lamp is switched on or off using the computed flag values.
+5. The control code and operation label are updated again for clarity.
+
+Viva line: `MainPanel` does not implement ALU logic itself. It only sends values to `ALUCore` and shows the result.
+
+### 15.4 `ALUCore.java` line-by-line logic
+
+This file contains the actual ALU calculation logic.
+
+#### 15.4.1 Width constant
+
+`public static final int WIDTH = 8;`
+
+This means the project uses 8-bit values for visualization. It keeps the schematic readable.
+
+#### 15.4.2 `Op` enum
+
+Each operation stores two pieces of information:
+
+1. `controlBits` - the 4-bit ALU control code.
+2. `label` - the display name used in the UI.
+
+For example:
+
+- ADD uses `0010`
+- SUB uses `0110`
+- AND uses `0000`
+- OR uses `0001`
+
+#### 15.4.3 `FullAdderStep`
+
+This class stores the state of one full-adder bit:
+
+- `index` is the bit position.
+- `a` is the bit from operand A.
+- `b` is the bit from operand B.
+- `carryIn` is the carry from the previous bit.
+- `sum` is the output bit.
+- `carryOut` is the next carry.
+
+This trace is what makes the carry animation possible.
+
+#### 15.4.4 `Result`
+
+This class stores everything returned by the ALU:
+
+- operation used
+- original operands
+- effective operands after transformation
+- final result
+- flags
+- adder trace
+
+This is a report-friendly design because it separates calculation from presentation.
+
+#### 15.4.5 `compute(Op op, int a, int b)`
+
+This is the dispatcher method.
+
+1. Mask both operands to 8 bits.
+2. Check the selected operation.
+3. Route to the correct helper method.
+4. Return the correct `Result` object.
+
+This method is the single public entry point to the ALU.
+
+#### 15.4.6 `doAdd(...)`
+
+This is the main arithmetic engine.
+
+1. If subtracting, invert B and set the initial carry to 1.
+2. Create an empty trace list.
+3. Initialize `sum` to 0.
+4. Loop from bit 0 to bit 7.
+5. Extract the current bit of A and B.
+6. Compute the sum bit using XOR.
+7. Compute the carry-out using the full adder formula.
+8. Store the sum bit into the correct position of `sum`.
+9. Add a `FullAdderStep` to the trace.
+10. Move the carry forward to the next bit.
+11. After the loop, compute sign bits for A, B, and result.
+12. Detect signed overflow.
+13. Detect carry out.
+14. Detect zero and negative flags.
+15. Return a complete `Result`.
+
+Viva explanation: this is exactly the ripple-carry adder taught in Computer Architecture.
+
+#### 15.4.7 `doBitwise(...)`
+
+1. Mask the result to 8 bits.
+2. Set zero if the result is 0.
+3. Set negative based on the MSB.
+4. Return a `Result` with no carry or overflow.
+
+#### 15.4.8 `doSlt(...)`
+
+1. Perform subtraction internally using `doAdd` in subtraction mode.
+2. Apply the rule `negative XOR overflow`.
+3. If true, result is 1, otherwise 0.
+4. Return the SLT result.
+
+#### 15.4.9 `doShift(...)`
+
+1. Extract the shift amount from B.
+2. If SLL, shift left and mask.
+3. If SRL, use logical right shift.
+4. If SRA, sign-extend first, then use arithmetic right shift.
+5. Compute zero and negative flags.
+6. Return the shift result.
+
+#### 15.4.10 `mask(...)`, `toBinary(...)`, and `parseOperand(...)`
+
+- `mask` keeps only 8 bits.
+- `toBinary` prints an 8-bit binary string.
+- `parseOperand` accepts decimal, hex, binary, and negative decimal input.
+
+Viva line: `ALUCore` is pure logic. It has no Swing dependency, so it is easy to test and explain.
+
+### 15.5 `HazardDetector.java` line-by-line logic
+
+This file checks whether the current instruction depends on the previous one.
+
+1. `HazardType` lists the supported hazard kinds.
+2. `Result` stores the detected hazard type, the writer register, the readers, and a suggestion.
+3. `analyze(prev, next)` is the main method.
+4. If either instruction is missing, return `NONE`.
+5. Ask the previous instruction which register it writes to.
+6. If it does not write a register, no hazard is possible.
+7. Build a list of source registers used by the next instruction.
+8. Compare the writer against the reader list.
+9. If no overlap exists, return `NONE`.
+10. If the previous instruction is a load, classify the problem as `LOAD_USE`.
+11. Otherwise classify it as `RAW`.
+
+Viva line: a hazard is detected when one instruction needs a value that was just produced by the previous instruction.
+
+### 15.6 `InstructionParser.java` line-by-line logic
+
+This file converts text into a structured instruction.
+
+1. Trim the input line.
+2. If it is empty, throw an error.
+3. Separate mnemonic and operand list.
+4. Convert the mnemonic to lowercase.
+5. Use a switch to decide instruction type.
+6. For R-type instructions, parse `rd, rs, rt`.
+7. For `addi`, parse `rt, rs, imm`.
+8. For `lw` and `sw`, parse `rt, imm(rs)`.
+9. Convert register names with `MachineState.regIndex(...)`.
+10. Convert immediates with `parseImmediate(...)`.
+
+Viva line: the parser acts like a tiny assembler for the subset of MIPS that Bitsmith supports.
+
+### 15.7 `ParsedInstruction.java` line-by-line logic
+
+This class is a data holder.
+
+1. `Kind` identifies whether the instruction is R-type, I-type arithmetic, load, or store.
+2. `mnemonic` stores the original instruction name.
+3. `aluOp` stores the ALU operation to use.
+4. `rs`, `rt`, and `rd` store register indices.
+5. `immediate` stores the immediate constant.
+6. `destinationRegister()` returns the destination register depending on instruction kind.
+7. `toString()` formats the instruction in readable assembly form.
+
+Viva line: this class is the structured version of the assembly line entered by the user.
+
+### 15.8 `InstructionExecutor.java` line-by-line logic
+
+This file turns a parsed instruction into a visible execution plan.
+
+1. `HazardAction` describes the optional hazard response.
+2. `PipelinePlan` stores the final step list and the hazard result.
+3. `execute(...)` is still available as a convenience wrapper.
+4. `plan(...)` is the main method used by the UI.
+5. Start with an empty `steps` list.
+6. Add IF and ID cycle steps.
+7. If a hazard exists, insert STALL and BUBBLE for load-use, or FORWARD for RAW.
+8. For R-type and addi, add EX and WB stages.
+9. For load, add EX, MEM, and WB stages.
+10. For store, add EX and MEM stages.
+11. After cycle planning, execute the instruction-specific state changes.
+12. `executeRType` reads source registers, performs ALU computation, then writes back.
+13. `executeITypeArith` does the same but uses the immediate value.
+14. `executeLoad` calculates the effective address, reads memory, and writes to a register.
+15. `executeStore` calculates the address, reads the data register, and writes memory.
+
+Viva line: this class is like the micro-operation planner for a CPU cycle sequence.
+
+### 15.9 `DataFlowPanel.java` line-by-line logic
+
+This is the main orchestrator for the datapath tab.
+
+1. Constants define the background and accent colors.
+2. `EXAMPLES` stores the preset instructions shown in the combo box.
+3. `state` is the machine state shared by register and memory panels.
+4. `regFile`, `aluPanel`, `memoryPanel`, and `logPanel` are the visible components.
+5. `stagePanel` shows the pipeline stages.
+6. `exampleCombo`, `customField`, `runBtn`, `stepBtn`, `resetBtn`, and `speedSlider` are the instruction controls.
+7. `hazardBanner` shows hazard messages in a prominent place.
+8. `pendingSteps` stores the current execution plan.
+9. `stepCursor` tracks the current step index.
+10. `currentInstr` stores the instruction being executed.
+11. `lastCompletedInstruction` is needed for hazard checking.
+12. `currentHazard` stores the current hazard analysis result.
+13. `frameTimer` drives animation.
+14. `currentAnim` stores the active wire animation.
+15. `busy` prevents overlapping instruction runs.
+
+Important constructor logic:
+
+1. Set a soft background and padding.
+2. Create all child panels.
+3. Add the top control section.
+4. Add the center datapath view.
+5. Add the log at the bottom.
+6. Attach button listeners.
+7. Connect the Open Internals button to the ALU tab.
+8. Start the timer for animation updates.
+
+Important planning logic in `startInstruction()`:
+
+1. Parse the text from the instruction field.
+2. Run hazard detection against the previous instruction.
+3. If hazard exists, log it and highlight affected registers.
+4. Update the hazard banner text.
+5. Build the execution plan using `InstructionExecutor.plan(...)`.
+6. Send the plan to the pipeline stage panel.
+7. Reset the step cursor.
+8. Clear old visual highlights.
+9. Set ALU panel operation and reset its display.
+10. Append the instruction header to the log.
+11. Mark the panel busy and begin the first step.
+
+Important animation logic in `beginCurrentStep()`:
+
+1. Read the current step from the step list.
+2. Highlight the corresponding stage in `stagePanel`.
+3. Write the step description to the log.
+4. For register reads, mark the register file and animate wire travel to the correct destination.
+5. For cycle steps such as IF, ID, EX, MEM, WB, STALL, BUBBLE, and FORWARD, create a short labeled animation cue.
+6. For ALU compute, set the ALU active and display the result immediately.
+7. For memory access, animate data movement between ALU and memory.
+8. For writeback, animate movement into the register file.
+
+Important ending logic in `finishInstruction()`:
+
+1. Set busy to false.
+2. Turn off the ALU highlight.
+3. Clear register and memory highlights.
+4. Clear the wires overlay.
+5. Refresh the register file and memory display.
+6. Clear hazard highlighting.
+7. Clear the pipeline stage panel.
+8. Remember the instruction as the previous instruction for future hazard detection.
+
+Viva line: `DataFlowPanel` is the control tower of the Data Flow tab.
+
+### 15.10 `PipelineStagePanel.java` line-by-line logic
+
+This panel was added to show the stage flow in a compact way.
+
+1. The panel uses a soft background and border like the rest of the UI.
+2. `title` shows the name of the strip.
+3. `note` shows the current instruction and hazard message.
+4. `stages` stores the badge components in order.
+5. The constructor adds badges for IF, ID, EX, MEM, WB, STALL, BUBBLE, and FORWARD.
+6. `setPlan(...)` updates the summary text and makes stall/bubble/forward visible when needed.
+7. `setActiveStep(...)` highlights the current stage.
+8. `clearActive()` resets everything to idle.
+9. `mapStage(...)` converts execution step types to display labels.
+
+Viva line: this panel makes the instruction progression visible in one glance.
+
+### 15.11 `RegisterFilePanel.java` line-by-line logic
+
+This panel shows all 32 registers.
+
+1. A grid is created with 4 rows and 8 columns.
+2. Each cell is a custom `Cell` component.
+3. `markRead(...)` highlights the register being read into ALU input A or B.
+4. `markWrite(...)` highlights the destination register and updates its displayed value.
+5. `markHazard(...)` stores the hazard writer and the readers involved.
+6. `clearHazard()` removes the hazard highlight.
+7. `refreshAll()` copies current values from machine state.
+8. The nested `Cell` handles click-to-edit behavior.
+9. In `paintComponent`, the cell chooses colors based on read, write, or hazard state.
+10. The register name and numeric index are drawn in the top corners.
+11. The hex value is drawn in the center.
+12. The decimal hint is drawn at the bottom.
+
+Viva line: the register file is both a storage view and a teaching view of register dependencies.
+
+### 15.12 `MemoryPanel.java` line-by-line logic
+
+This panel shows data memory.
+
+1. `RowsCanvas` stores memory as a list of address-value pairs.
+2. `refreshFromState()` repopulates the visible memory rows.
+3. `ensureRange(...)` makes sure the demo addresses around `MEM_BASE` stay visible.
+4. `markRead(...)` highlights a memory read and scrolls to the address.
+5. `markWrite(...)` writes into machine state, highlights the row, and scrolls to it.
+6. `paintComponent(...)` draws address, value, and ASCII columns.
+7. The ASCII conversion turns non-printable bytes into dots.
+
+Viva line: the memory panel shows how load and store interact with the datapath.
+
+### 15.13 `MiniALUPanel.java` line-by-line logic
+
+This is the compact ALU summary inside the datapath tab.
+
+1. It shows ALU input A and input B.
+2. It shows the operation label.
+3. It shows the result and signed decimal interpretation.
+4. It shows the four flags using lamp style indicators.
+5. The ALU box changes color when active.
+6. `setOperation(...)`, `setInputs(...)`, and `setResult(...)` update the view.
+7. `onOpenInternals(...)` wires the button to the main ALU tab.
+
+Viva line: this panel gives a quick summary before jumping to the full ALU view.
+
+### 15.14 `ExecutionLogPanel.java` line-by-line logic
+
+This panel gives the textual story of the simulation.
+
+1. The constructor creates a scrolling text area.
+2. `appendInstructionHeader(...)` starts a new instruction section.
+3. `appendStep(...)` logs atomic execution steps.
+4. `appendHazard(...)` writes hazard warnings.
+5. `appendCycleNote(...)` writes cycle labels such as IF or STALL.
+6. `clear()` resets the log when the user presses Reset.
+
+Viva line: the execution log is the easiest place to explain the CPU behavior step by step.
+
+### 15.15 `WireAnimation.java` line-by-line logic
+
+This class animates a value as it moves between components.
+
+1. It stores source point, destination point, label, and color.
+2. `start()` stores the start time.
+3. `linearProgress()` measures raw progress from 0 to 1.
+4. `easedProgress()` makes the motion smoother.
+5. `isDone()` checks whether animation time is finished.
+6. `currentPos()` calculates the current bubble position.
+
+Viva line: this class gives motion to the datapath so the flow feels alive.
+
+### 15.16 `WiresOverlay.java` line-by-line logic
+
+This panel draws the wires above the datapath.
+
+1. It is transparent because it sits on top of other panels.
+2. `setStaticWires(...)` stores fixed lines if needed.
+3. `setActive(...)` stores the current moving animation.
+4. `clearActive()` removes the current animation.
+5. In `paintComponent(...)`, the panel draws the static lines first.
+6. Then it draws the active highlighted wire.
+7. Finally it draws the moving value bubble with a label.
+
+Viva line: the overlay is what makes the data flow visibly move between components.
+
+## 16. What to Say in Viva
+
+If the examiner asks for a short explanation, you can answer in this order:
+
+1. Bitsmith is a Java Swing visualizer for MIPS ALU internals and data flow.
+2. It demonstrates arithmetic, logic, shift, and control signal concepts from Computer Architecture.
+3. It includes a second tab for instruction-level datapath simulation.
+4. The project now shows hazards, pipeline stages, stalls, and forwarding cues.
+5. The code is divided into a simulation core and a UI layer.
+6. `ALUCore` performs the actual operations.
+7. `DataFlowPanel` controls the instruction flow visualization.
+8. `HazardDetector` checks RAW and load-use dependencies.
+9. `InstructionExecutor` turns an instruction into visible execution steps.
+10. The project is meant for teaching and demonstration rather than full CPU emulation.
+
+## 17. Short Line-by-Line Revision Notes
+
+Use these as quick revision prompts:
+
+- `Main.java` starts the app.
+- `AppPanel.java` holds the tabs.
+- `MainPanel.java` runs and visualizes ALU operations.
+- `ALUCore.java` computes the results.
+- `AdderSchematicPanel.java` shows carry flow.
+- `RegisterViewPanel.java` shows logic and shifts.
+- `MachineState.java` stores registers and memory.
+- `InstructionParser.java` understands assembly text.
+- `ParsedInstruction.java` stores the parsed instruction.
+- `HazardDetector.java` finds dependencies.
+- `InstructionExecutor.java` builds execution steps.
+- `ExecutionStep.java` stores step metadata.
+- `DataFlowPanel.java` orchestrates the whole datapath tab.
+- `PipelineStagePanel.java` shows stage flow.
+- `RegisterFilePanel.java` shows registers.
+- `MemoryPanel.java` shows memory.
+- `MiniALUPanel.java` shows the compact ALU view.
+- `ExecutionLogPanel.java` writes the step trace.
+- `WireAnimation.java` moves the data bubble.
+- `WiresOverlay.java` draws the wires.
+
+## 18. Conclusion for the Report
+
+Bitsmith is a complete teaching tool for a Computer Architecture final project because it shows both the internal ALU logic and the higher level MIPS datapath behavior. The added pipeline stage view and hazard handling make the project stronger because they connect the ALU model to real processor design ideas such as execution stages, dependency checking, stalls, and forwarding.
