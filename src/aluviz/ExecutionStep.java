@@ -8,6 +8,14 @@ package aluviz;
 public class ExecutionStep {
 
     public enum Type {
+        IF,               // instruction fetch cycle
+        ID,               // decode / register read cycle
+        EX,               // execute / ALU cycle
+        MEM,              // memory access cycle
+        WB,               // write-back cycle
+        STALL,            // pipeline stall inserted because of hazard
+        BUBBLE,           // bubble/NOP cycle
+        FORWARD,          // forwarding note / visual cue
         READ_REG,         // value flowing FROM register file → ALU input
         IMMEDIATE,        // sign-extended immediate flowing → ALU input B
         ALU_COMPUTE,      // ALU performs its operation
@@ -84,6 +92,22 @@ public class ExecutionStep {
         return new ExecutionStep(Type.WRITEBACK,
             "Writeback memory value 0x" + hex(value) + " → " + MachineState.regName(regIndex),
             regIndex, 0, value, null, 0, 0, null, "MEM");
+    }
+
+    public static ExecutionStep cycle(Type type, String label) {
+        return new ExecutionStep(type, label, -1, 0, 0, null, 0, 0, null, null);
+    }
+
+    public static ExecutionStep stall(String message) {
+        return cycle(Type.STALL, message);
+    }
+
+    public static ExecutionStep bubble(String message) {
+        return cycle(Type.BUBBLE, message);
+    }
+
+    public static ExecutionStep forward(String message) {
+        return cycle(Type.FORWARD, message);
     }
 
     private static String hex(int v) {

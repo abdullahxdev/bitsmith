@@ -10,25 +10,66 @@ import java.util.List;
  */
 public class InstructionExecutor {
 
+    public enum HazardAction {
+        NONE,
+        STALL,
+        FORWARD
+    }
+
+    public static class PipelinePlan {
+        public final List<ExecutionStep> steps;
+        public final HazardDetector.Result hazard;
+
+        public PipelinePlan(List<ExecutionStep> steps, HazardDetector.Result hazard) {
+            this.steps = steps;
+            this.hazard = hazard;
+        }
+    }
+
     public static List<ExecutionStep> execute(ParsedInstruction instr, MachineState state) {
+        return plan(instr, state, null).steps;
+    }
+
+    public static PipelinePlan plan(ParsedInstruction instr, MachineState state, HazardDetector.Result hazard) {
         List<ExecutionStep> steps = new ArrayList<>();
+
+        steps.add(ExecutionStep.cycle(ExecutionStep.Type.IF, "Cycle 1 -> IF"));
+        steps.add(ExecutionStep.cycle(ExecutionStep.Type.ID, "Cycle 2 -> ID"));
+
+        if (hazard != null && hazard.type != HazardDetector.HazardType.NONE) {
+            if (hazard.type == HazardDetector.HazardType.LOAD_USE) {
+                steps.add(ExecutionStep.stall("Hazard detected: load-use RAW -> stall"));
+                steps.add(ExecutionStep.bubble("Insert bubble to wait for loaded value"));
+            } else {
+                steps.add(ExecutionStep.forward("Hazard detected: RAW -> forwarding suggested"));
+            }
+        }
 
         switch (instr.kind) {
             case R_TYPE:
+                steps.add(ExecutionStep.cycle(ExecutionStep.Type.EX, "Cycle 3 -> EX"));
+                steps.add(ExecutionStep.cycle(ExecutionStep.Type.WB, "Cycle 4 -> WB"));
                 executeRType(instr, state, steps);
                 break;
             case I_TYPE_ARITH:
+                steps.add(ExecutionStep.cycle(ExecutionStep.Type.EX, "Cycle 3 -> EX"));
+                steps.add(ExecutionStep.cycle(ExecutionStep.Type.WB, "Cycle 4 -> WB"));
                 executeITypeArith(instr, state, steps);
                 break;
             case LOAD:
+                steps.add(ExecutionStep.cycle(ExecutionStep.Type.EX, "Cycle 3 -> EX"));
+                steps.add(ExecutionStep.cycle(ExecutionStep.Type.MEM, "Cycle 4 -> MEM"));
+                steps.add(ExecutionStep.cycle(ExecutionStep.Type.WB, "Cycle 5 -> WB"));
                 executeLoad(instr, state, steps);
                 break;
             case STORE:
+                steps.add(ExecutionStep.cycle(ExecutionStep.Type.EX, "Cycle 3 -> EX"));
+                steps.add(ExecutionStep.cycle(ExecutionStep.Type.MEM, "Cycle 4 -> MEM"));
                 executeStore(instr, state, steps);
                 break;
         }
 
-        return steps;
+        return new PipelinePlan(steps, hazard);
     }
 
     private static void executeRType(ParsedInstruction instr, MachineState state,

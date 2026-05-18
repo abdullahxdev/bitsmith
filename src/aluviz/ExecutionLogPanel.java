@@ -10,10 +10,11 @@ import java.awt.*;
  */
 public class ExecutionLogPanel extends JPanel {
 
-    private static final Color BG       = new Color(0xFAFAFA);
+    private static final Color BG       = new Color(0xF4F7FB);
     private static final Color LOG_BG   = Color.WHITE;
-    private static final Color LOG_FG   = new Color(0x212121);
-    private static final Color MUTED    = new Color(0x9E9E9E);
+    private static final Color LOG_FG   = new Color(0x1F2937);
+    private static final Color MUTED    = new Color(0x6B7280);
+    private static final Color BORDER   = new Color(0xD8E0EA);
 
     private final JTextArea log = new JTextArea();
     private int stepCounter = 0;
@@ -23,8 +24,13 @@ public class ExecutionLogPanel extends JPanel {
         super(new BorderLayout(0, 4));
         setBackground(BG);
         setBorder(BorderFactory.createCompoundBorder(
-            BorderFactory.createTitledBorder("Execution Log"),
-            new EmptyBorder(4, 8, 4, 8)));
+            BorderFactory.createLineBorder(BORDER),
+            new EmptyBorder(6, 8, 6, 8)));
+
+        JLabel title = new JLabel("Execution Log");
+        title.setFont(title.getFont().deriveFont(Font.BOLD, 13f));
+        title.setForeground(new Color(0x124A9C));
+        add(title, BorderLayout.NORTH);
 
         log.setEditable(false);
         log.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
@@ -33,7 +39,7 @@ public class ExecutionLogPanel extends JPanel {
         log.setLineWrap(false);
 
         JScrollPane scroll = new JScrollPane(log);
-        scroll.setBorder(BorderFactory.createLineBorder(new Color(0xE0E0E0)));
+        scroll.setBorder(BorderFactory.createLineBorder(BORDER));
         scroll.setPreferredSize(new Dimension(800, 120));
         add(scroll, BorderLayout.CENTER);
 
@@ -56,6 +62,16 @@ public class ExecutionLogPanel extends JPanel {
         stepCounter++;
         String prefix = "  [" + stepCounter + "] ";
         log.append(prefix + step.description + "\n");
+        log.setCaretPosition(log.getDocument().getLength());
+    }
+
+    public void appendHazard(String text) {
+        log.append("  [HAZARD] " + text + "\n");
+        log.setCaretPosition(log.getDocument().getLength());
+    }
+
+    public void appendCycleNote(String text) {
+        log.append("  [CYCLE] " + text + "\n");
         log.setCaretPosition(log.getDocument().getLength());
     }
 

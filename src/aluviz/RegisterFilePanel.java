@@ -16,9 +16,9 @@ public class RegisterFilePanel extends JPanel {
     public static final int CELL_W = 84;
     public static final int CELL_H = 64;
 
-    private static final Color BG          = new Color(0xFAFAFA);
+    private static final Color BG          = new Color(0xF4F7FB);
     private static final Color CELL_BG     = Color.WHITE;
-    private static final Color CELL_BORDER = new Color(0xE0E0E0);
+    private static final Color CELL_BORDER = new Color(0xD8E0EA);
     private static final Color TEXT        = new Color(0x212121);
     private static final Color TEXT_MUTED  = new Color(0x757575);
     private static final Color ZERO_BG     = new Color(0xF5F5F5);   // $zero is special — slightly muted
@@ -31,6 +31,9 @@ public class RegisterFilePanel extends JPanel {
     private final Cell[] cells = new Cell[MachineState.NUM_REGS];
     private int readA = -1, readB = -1, writeIdx = -1;
     private int lastWriteValue = 0;
+    // Hazard highlight: write index and reads involved in a detected hazard
+    private int hazardWrite = -1;
+    private boolean[] hazardReads = new boolean[MachineState.NUM_REGS];
 
     private final JLabel statusLine = new JLabel(" ");
 
@@ -39,8 +42,13 @@ public class RegisterFilePanel extends JPanel {
         this.state = state;
         setBackground(BG);
         setBorder(BorderFactory.createCompoundBorder(
-            BorderFactory.createTitledBorder("Register File (32 × 32-bit)"),
+            BorderFactory.createLineBorder(CELL_BORDER),
             new EmptyBorder(6, 8, 6, 8)));
+
+        JLabel title = new JLabel("Register File (32 × 32-bit)");
+        title.setFont(title.getFont().deriveFont(Font.BOLD, 13f));
+        title.setForeground(new Color(0x124A9C));
+        add(title, BorderLayout.NORTH);
 
         JPanel grid = new JPanel(new GridLayout(ROWS, COLS, 4, 4));
         grid.setBackground(BG);
@@ -51,7 +59,7 @@ public class RegisterFilePanel extends JPanel {
         add(grid, BorderLayout.CENTER);
 
         statusLine.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
-        statusLine.setForeground(TEXT_MUTED);
+        statusLine.setForeground(new Color(0x475569));
         statusLine.setBorder(new EmptyBorder(4, 6, 0, 6));
         add(statusLine, BorderLayout.SOUTH);
 
@@ -72,6 +80,24 @@ public class RegisterFilePanel extends JPanel {
         lastWriteValue = value;
         cells[idx].setValueDisplay(value);
         state.writeReg(idx, value);
+        repaintCells();
+        updateStatus();
+    }
+
+    /** Highlight a hazard: which register was written previously and which registers are being read now. */
+    public void markHazard(int writeIndex, int[] readIndices) {
+        hazardWrite = writeIndex;
+        for (int i = 0; i < hazardReads.length; i++) hazardReads[i] = false;
+        if (readIndices != null) {
+            for (int r : readIndices) if (r >= 0 && r < hazardReads.length) hazardReads[r] = true;
+        }
+        repaintCells();
+        updateStatus();
+    }
+
+    public void clearHazard() {
+        hazardWrite = -1;
+        for (int i = 0; i < hazardReads.length; i++) hazardReads[i] = false;
         repaintCells();
         updateStatus();
     }
@@ -162,12 +188,17 @@ public class RegisterFilePanel extends JPanel {
             int w = getWidth(), h = getHeight();
             boolean isRead  = (idx == readA || idx == readB);
             boolean isWrite = (idx == writeIdx);
+            boolean isHazardWrite = (idx == hazardWrite);
+            boolean isHazardRead = hazardReads[idx];
             boolean isZero  = idx == 0;
-
             Color bg = CELL_BG, border = CELL_BORDER;
             if (isWrite) {
                 bg = WRITE_BG; border = WRITE_BORDER;
             } else if (isRead) {
+                bg = READ_BG; border = READ_BORDER;
+            } else if (isHazardWrite) {
+                bg = WRITE_BG; border = WRITE_BORDER;
+            } else if (isHazardRead) {
                 bg = READ_BG; border = READ_BORDER;
             } else if (isZero) {
                 bg = ZERO_BG;
@@ -191,8 +222,8 @@ public class RegisterFilePanel extends JPanel {
 
             // Value (center) — hex
             g.setFont(new Font(Font.MONOSPACED, Font.BOLD, 14));
-            g.setColor(isRead || isWrite ? new Color(0x0D47A1) : TEXT);
-            if (isWrite) g.setColor(new Color(0xE65100));
+            g.setColor((isRead || isWrite || isHazardRead || isHazardWrite) ? new Color(0x0B5CAD) : TEXT);
+            if (isWrite || isHazardWrite) g.setColor(new Color(0xB45309));
             String hex = String.format("0x%08X", displayValue);
             FontMetrics fm2 = g.getFontMetrics();
             int hexW = fm2.stringWidth(hex);

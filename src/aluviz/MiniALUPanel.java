@@ -12,8 +12,8 @@ import java.awt.event.ActionListener;
  */
 public class MiniALUPanel extends JPanel {
 
-    private static final Color BG          = new Color(0xFAFAFA);
-    private static final Color BORDER      = new Color(0xE0E0E0);
+    private static final Color BG          = new Color(0xF4F7FB);
+    private static final Color BORDER      = new Color(0xD8E0EA);
     private static final Color BOX_BG      = Color.WHITE;
     private static final Color BOX_BORDER  = new Color(0xBDBDBD);
     private static final Color ACTIVE_BG   = new Color(0xFFE0B2);
@@ -43,8 +43,13 @@ public class MiniALUPanel extends JPanel {
         super(new BorderLayout(0, 6));
         setBackground(BG);
         setBorder(BorderFactory.createCompoundBorder(
-            BorderFactory.createTitledBorder("ALU"),
+            BorderFactory.createLineBorder(BORDER),
             new EmptyBorder(6, 8, 6, 8)));
+
+        JLabel title = new JLabel("ALU");
+        title.setFont(title.getFont().deriveFont(Font.BOLD, 13f));
+        title.setForeground(new Color(0x124A9C));
+        add(title, BorderLayout.NORTH);
 
         // Inputs row (top)
         JPanel inputs = new JPanel(new GridLayout(2, 1, 0, 3));
@@ -186,7 +191,7 @@ public class MiniALUPanel extends JPanel {
             label.setFont(new Font(Font.MONOSPACED, Font.BOLD, 18));
             label.setHorizontalAlignment(SwingConstants.CENTER);
             add(label, BorderLayout.CENTER);
-            setBorder(BorderFactory.createLineBorder(new Color(0xCCCCCC)));
+            setBorder(BorderFactory.createLineBorder(new Color(0xD0D7DE)));
             setOn(false);
         }
         void setOn(boolean v) {

@@ -16,10 +16,10 @@ public class MemoryPanel extends JPanel {
     private static final int ROWS_VISIBLE   = 12;
     private static final int ROW_H          = 26;
 
-    private static final Color BG            = new Color(0xFAFAFA);
+    private static final Color BG            = new Color(0xF4F7FB);
     private static final Color ROW_BG        = Color.WHITE;
     private static final Color ROW_ALT       = new Color(0xF5F5F5);
-    private static final Color BORDER        = new Color(0xE0E0E0);
+    private static final Color BORDER        = new Color(0xD8E0EA);
     private static final Color TEXT          = new Color(0x212121);
     private static final Color TEXT_MUTED    = new Color(0x9E9E9E);
     private static final Color HEADER_BG     = new Color(0xEEEEEE);
@@ -41,8 +41,13 @@ public class MemoryPanel extends JPanel {
         this.state = state;
         setBackground(BG);
         setBorder(BorderFactory.createCompoundBorder(
-            BorderFactory.createTitledBorder("Data Memory"),
+            BorderFactory.createLineBorder(BORDER),
             new EmptyBorder(6, 8, 6, 8)));
+
+        JLabel title = new JLabel("Data Memory");
+        title.setFont(title.getFont().deriveFont(Font.BOLD, 13f));
+        title.setForeground(new Color(0x124A9C));
+        add(title, BorderLayout.NORTH);
 
         canvas = new RowsCanvas();
         scroller = new JScrollPane(canvas,
@@ -56,7 +61,7 @@ public class MemoryPanel extends JPanel {
         add(scroller, BorderLayout.CENTER);
 
         statusLine.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
-        statusLine.setForeground(TEXT_MUTED);
+        statusLine.setForeground(new Color(0x475569));
         statusLine.setBorder(new EmptyBorder(4, 6, 0, 6));
         add(statusLine, BorderLayout.SOUTH);
 
